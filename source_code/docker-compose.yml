@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tax-backend
+    env_file:
+      - .env
+    environment:
+      - RAG_CHROMA_DIR=/app/agents/rag/chroma
+      - RAG_COLLECTION=tax_handbook
+      - EMBED_MODEL=text-embedding-3-small
+      # 將檔案 log 啟用到固定路徑，方便透過 volume 取用
+      - TAX_LOG_FILE=/app/logs/tax_app.log
+    ports:
+      - "32770:32770"
+    # 將容器中的 logs/ 與 reports/ 掛回本機
+    volumes:
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    restart: unless-stopped
+    networks:
+      - default
+      - fin-network
+    # 當前還是以gradio為主服務入口，REST API 版本暫時註解掉
+    # command: uvicorn app_fastapi:app --host 0.0.0.0 --port 32770
+
+networks:
+  fin-network:
+    external: true

@@ -1,0 +1,146 @@
+{
+  "ts": 1764814305,
+  "tool_name": "gift_tax",
+  "mode": "manual_free",
+  "status": "sat",
+  "baseline": 2109000,
+  "optimized": 2056000,
+  "budget": null,
+  "result": {
+    "mode": "manual_free",
+    "input_params": {
+      "period_choice": 3,
+      "land_value": 12000000,
+      "ground_value": 1000000,
+      "house_value": 6000000,
+      "others_value": 5000000,
+      "not_included_land": 0.0,
+      "not_included_house": 0.0,
+      "not_included_others": 0.0,
+      "remaining_exemption_98": 500000,
+      "previous_gift_sum_in_this_year": 3500000,
+      "land_increment_tax": 0.0,
+      "deed_tax": 0.0,
+      "other_gift_burdens": 0.0,
+      "previous_gift_tax_or_credit": 400000,
+      "new_old_system_adjustment": 0.0,
+      "free_vars": [
+        "not_included_land",
+        "not_included_house",
+        "deed_tax",
+        "other_gift_burdens"
+      ]
+    },
+    "baseline": 2109000,
+    "baseline_status": "unsat",
+    "baseline_with_constraints": null,
+    "optimized": 2056000,
+    "status": "sat",
+    "diff": {
+      "deed_tax": {
+        "original": 0.0,
+        "optimized": 500000,
+        "difference": 500000.0
+      }
+    },
+    "final_params": {
+      "land_value": {
+        "value": 12000000,
+        "type": "fixed"
+      },
+      "ground_value": {
+        "value": 1000000,
+        "type": "fixed"
+      },
+      "house_value": {
+        "value": 6000000,
+        "type": "fixed"
+      },
+      "others_value": {
+        "value": 5000000,
+        "type": "fixed"
+      },
+      "not_included_land": {
+        "value": 0,
+        "type": "free"
+      },
+      "not_included_house": {
+        "value": 0,
+        "type": "free"
+      },
+      "not_included_others": {
+        "value": 0,
+        "type": "fixed"
+      },
+      "remaining_exemption_98": {
+        "value": 500000,
+        "type": "fixed"
+      },
+      "previous_gift_sum_in_this_year": {
+        "value": 3500000,
+        "type": "fixed"
+      },
+      "land_increment_tax": {
+        "value": 0,
+        "type": "fixed"
+      },
+      "deed_tax": {
+        "value": 500000,
+        "type": "free"
+      },
+      "other_gift_burdens": {
+        "value": 0,
+        "type": "free"
+      },
+      "previous_gift_tax_or_credit": {
+        "value": 400000,
+        "type": "fixed"
+      },
+      "new_old_system_adjustment": {
+        "value": 0,
+        "type": "fixed"
+      }
+    },
+    "constraints": {
+      "deed_tax + other_gift_burdens": {
+        "==": 500000.0
+      },
+      "not_included_land + not_included_house": {
+        "<=": "0.25 * (deed_tax + other_gift_burdens)"
+      }
+    }
+  },
+  "payload": {
+    "tool_name": "gift_tax",
+    "user_params": {
+      "period_choice": 3,
+      "land_value": 12000000,
+      "ground_value": 1000000,
+      "house_value": 6000000,
+      "others_value": 5000000,
+      "remaining_exemption_98": 500000,
+      "previous_gift_sum_in_this_year": 3500000,
+      "previous_gift_tax_or_credit": 400000,
+      "free_vars": [
+        "not_included_land",
+        "not_included_house",
+        "deed_tax",
+        "other_gift_burdens"
+      ],
+      "constraints": {
+        "deed_tax + other_gift_burdens": {
+          "==": 500000.0
+        },
+        "not_included_land + not_included_house": {
+          "<=": "0.25 * (deed_tax + other_gift_burdens)"
+        }
+      }
+    },
+    "raw_query": "下一步",
+    "timestamp": "2025-12-04T02:11:08.456425",
+    "__prev_tax__": null,
+    "early_tips_md": "#### 條件式建議（先看再決定要不要加）\n\n**檢視贈與免稅額**\n- 理由：確認當前免稅額是否足夠，避免超過免稅額而產生贈與稅。\n\n**考慮分期贈與**\n- 理由：將贈與金額分期進行，以降低每年贈與的總額，減少稅負。\n\n**評估不計入項目**\n- 理由：檢查不計入的土地、房屋及其他項目，確保正確計算贈與總額，降低稅負。",
+    "op": null
+  },
+  "markdown": "### 贈與稅\n在目前前提與約束下，最佳解為 **2,056,000** 元（基準 2,109,000 元，↓ 53,000）。\n\n#### 重點數據\n- **計算模式**：manual_free\n- **求解狀態**：sat\n- **輸入稅額**：2,109,000\n- **比較基準**：基準 2,109,000\n- **使用稅額 / 最佳稅額**：2,056,000\n\n#### 參數調整（與原輸入相比）\n- 契稅：0 → 500,000（↑ 500,000）\n\n#### 與上一輪相比的參數變化\n（無上一輪可比較）\n\n#### 套用的約束\n- 契稅（元） + 其他贈與負擔（元） ＝ 500,000\n- 不計入土地（元） + 不計入房屋（元） <= 0.25 × (契稅（元） + 其他贈與負擔（元）)\n\n#### 輸入稅額的參數\n- 贈與發生年份，或直接輸入期間代碼 1-4：\n  1. 98/01/23 - 106/05/11\n  2. 106/05/12 - 110/12/31\n  3. 111/01/01 - 113/12/31\n  4. 114/01/01 以後：3\n- 土地價值：12,000,000\n- 地上物價值：1,000,000\n- 房屋價值：6,000,000\n- 動產及權利價值：5,000,000\n- 不計入土地：0\n- 不計入房屋：0\n- 不計入其他：0\n- 98 舊制剩餘免稅額：500,000\n- 同年度前次贈與總額：3,500,000\n- 土地增值稅：0\n- 契稅：0\n- 其他贈與負擔：0\n- 前次贈與稅／扣抵：400,000\n- 新舊制差額調整：0\n\n#### 目前最佳解輸入值\n- 土地價值：12,000,000（預設）\n- 地上物價值：1,000,000（預設）\n- 房屋價值：6,000,000（預設）\n- 動產及權利價值：5,000,000（預設）\n- 不計入土地：0（建議）\n- 不計入房屋：0（建議）\n- 不計入其他：0（預設）\n- 98 舊制剩餘免稅額：500,000（預設）\n- 同年度前次贈與總額：3,500,000（預設）\n- 土地增值稅：0（預設）\n- 契稅：500,000（建議）\n- 其他贈與負擔：0（建議）\n- 前次贈與稅／扣抵：400,000（預設）\n- 新舊制差額調整：0（預設）\n\n#### 結論\n- 可考慮調整不計入的土地或房屋價值，以降低契稅負擔。\n- 若符合資格，檢視是否可申報98舊制剩餘免稅額，進一步減少贈與稅。\n- 可考慮在同年度內分期贈與，以降低每次贈與的稅額。\n- 若有其他贈與負擔，建議詳細檢查是否可申報以減少總稅負。\n- 可考慮利用前次贈與稅的扣抵，減少本次贈與稅的負擔。\n\n#### 風險與合規備註\n- 本報告為模型推導之**估算**，實際稅負仍以主管機關規定與申報資料為準。\n- 涉及扣除認列、薪資結構等請務必依據法規與憑證（避免規避稅捐風險）。"
+}

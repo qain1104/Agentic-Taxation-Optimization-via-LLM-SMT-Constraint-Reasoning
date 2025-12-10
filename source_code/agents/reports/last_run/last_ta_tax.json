@@ -1,0 +1,257 @@
+{
+  "ts": 1764749501,
+  "tool_name": "ta_tax",
+  "mode": "maximize",
+  "status": null,
+  "baseline": 385770,
+  "optimized": 499993,
+  "budget": 500000,
+  "result": {
+    "baseline": 385770,
+    "optimized_total_qty": 16397,
+    "optimized_total_tax": 499993,
+    "optimized": 499993,
+    "optimized_sales": 16397,
+    "optimized_items": {
+      "cigarettes_new.quantity": 0.0,
+      "tobacco_cut_new.quantity": 0.0,
+      "cigar_new.quantity": 0.0,
+      "tobacco_other_new.quantity": 0.0,
+      "cigarettes_old.quantity": 3000.0,
+      "tobacco_cut_old.quantity": 0.0,
+      "cigar_old.quantity": 0.0,
+      "tobacco_other_old.quantity": 0.0,
+      "beer.quantity": 0.0,
+      "brew_other.quantity": 0.0,
+      "brew_other.alcohol_content": 0.0,
+      "distilled.quantity": 500.0,
+      "distilled.alcohol_content": 38.0,
+      "reprocessed_gt20.quantity": 2000.0,
+      "reprocessed_le20.quantity": 3500.0,
+      "reprocessed_le20.alcohol_content": 0.0,
+      "cooking_wine.quantity": 6247.0,
+      "cooking_wine_old.quantity": 0.0,
+      "alcohol_other.quantity": 150.0,
+      "alcohol_other.alcohol_content": 10.0,
+      "ethanol.quantity": 0.0,
+      "ethanol_old.quantity": 1000.0
+    },
+    "param_diff": {
+      "alcohol_other.quantity": {
+        "original": 0,
+        "optimized": 150.0,
+        "difference": 150.0
+      },
+      "distilled.quantity": {
+        "original": 0,
+        "optimized": 500.0,
+        "difference": 500.0
+      },
+      "cooking_wine.quantity": {
+        "original": 0,
+        "optimized": 6247.0,
+        "difference": 6247.0
+      }
+    },
+    "final_params": {
+      "cigarettes_new.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "紙菸-新制- 數量"
+      },
+      "tobacco_cut_new.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "菸絲-新制- 數量"
+      },
+      "cigar_new.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "雪茄-新制- 數量"
+      },
+      "tobacco_other_new.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "其他菸品-新制- 數量"
+      },
+      "cigarettes_old.quantity": {
+        "value": 3000.0,
+        "type": "fixed",
+        "label": "紙菸-舊制- 數量"
+      },
+      "tobacco_cut_old.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "菸絲-舊制- 數量"
+      },
+      "cigar_old.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "雪茄-舊制- 數量"
+      },
+      "tobacco_other_old.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "其他菸品-舊制- 數量"
+      },
+      "beer.quantity": {
+        "value": 0.0,
+        "type": "free",
+        "label": "釀造 → 啤酒- 數量"
+      },
+      "brew_other.quantity": {
+        "value": 0.0,
+        "type": "free",
+        "label": "釀造 → 其他- 數量"
+      },
+      "brew_other.alcohol_content": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "釀造 → 其他- 酒精度(%)"
+      },
+      "distilled.quantity": {
+        "value": 500.0,
+        "type": "free",
+        "label": "蒸餾酒類- 數量"
+      },
+      "distilled.alcohol_content": {
+        "value": 38.0,
+        "type": "fixed",
+        "label": "蒸餾酒類- 酒精度(%)"
+      },
+      "reprocessed_gt20.quantity": {
+        "value": 2000.0,
+        "type": "fixed",
+        "label": "再製 >20%- 數量"
+      },
+      "reprocessed_le20.quantity": {
+        "value": 3500.0,
+        "type": "fixed",
+        "label": "再製 ≤20%- 數量"
+      },
+      "reprocessed_le20.alcohol_content": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "再製 ≤20%- 酒精度(%)"
+      },
+      "cooking_wine.quantity": {
+        "value": 6247.0,
+        "type": "free",
+        "label": "料理酒- 數量"
+      },
+      "cooking_wine_old.quantity": {
+        "value": 0.0,
+        "type": "fixed",
+        "label": "料理酒-舊- 數量"
+      },
+      "alcohol_other.quantity": {
+        "value": 150.0,
+        "type": "free",
+        "label": "其他酒類- 數量"
+      },
+      "alcohol_other.alcohol_content": {
+        "value": 10.0,
+        "type": "fixed",
+        "label": "其他酒類- 酒精度(%)"
+      },
+      "ethanol.quantity": {
+        "value": 0.0,
+        "type": "free",
+        "label": "酒精- 數量"
+      },
+      "ethanol_old.quantity": {
+        "value": 1000.0,
+        "type": "fixed",
+        "label": "酒精-舊- 數量"
+      }
+    },
+    "free_vars": [
+      "alcohol_other.quantity",
+      "brew_other.quantity",
+      "distilled.quantity",
+      "cooking_wine.quantity",
+      "beer.quantity",
+      "ethanol.quantity"
+    ],
+    "constraints": {
+      "cooking_wine.quantity + ethanol.quantity": {
+        ">=": 2500.0
+      },
+      "alcohol_other.quantity": {
+        ">=": "0.3 * distilled.quantity"
+      },
+      "distilled.quantity": {
+        ">=": 500.0
+      },
+      "beer.quantity": {
+        ">=": "1.5 * brew_other.quantity"
+      }
+    },
+    "target_tax": 500000,
+    "elapsed_sec": 0.013088666833937168,
+    "input_params": {
+      "cigarettes_new.quantity": 0,
+      "tobacco_cut_new.quantity": 0,
+      "cigar_new.quantity": 0,
+      "tobacco_other_new.quantity": 0,
+      "cigarettes_old.quantity": 3000,
+      "tobacco_cut_old.quantity": 0,
+      "cigar_old.quantity": 0,
+      "tobacco_other_old.quantity": 0,
+      "beer.quantity": 0,
+      "brew_other.quantity": 0,
+      "brew_other.alcohol_content": 0.0,
+      "distilled.quantity": 0,
+      "distilled.alcohol_content": 38.0,
+      "reprocessed_gt20.quantity": 2000,
+      "reprocessed_le20.quantity": 3500,
+      "reprocessed_le20.alcohol_content": 0.0,
+      "cooking_wine.quantity": 0,
+      "cooking_wine_old.quantity": 0,
+      "alcohol_other.quantity": 0,
+      "alcohol_other.alcohol_content": 10.0,
+      "ethanol.quantity": 0,
+      "ethanol_old.quantity": 1000
+    }
+  },
+  "payload": {
+    "tool_name": "ta_tax",
+    "user_params": {
+      "cigarettes_old.quantity": 3000,
+      "reprocessed_gt20.quantity": 2000,
+      "reprocessed_le20.quantity": 3500,
+      "ethanol_old.quantity": 1000,
+      "distilled.alcohol_content": 38,
+      "alcohol_other.alcohol_content": 10,
+      "budget_tax": 500000,
+      "free_vars": [
+        "beer.quantity",
+        "brew_other.quantity",
+        "cooking_wine.quantity",
+        "ethanol.quantity",
+        "distilled.quantity",
+        "alcohol_other.quantity"
+      ],
+      "constraints": {
+        "cooking_wine.quantity + ethanol.quantity": {
+          ">=": 2500.0
+        },
+        "alcohol_other.quantity": {
+          ">=": "0.3 * distilled.quantity"
+        },
+        "distilled.quantity": {
+          ">=": 500.0
+        },
+        "beer.quantity": {
+          ">=": "1.5 * brew_other.quantity"
+        }
+      }
+    },
+    "raw_query": "下一步",
+    "timestamp": "2025-12-03T08:10:20.876106",
+    "__prev_tax__": null,
+    "early_tips_md": "#### 條件式建議（先看再決定要不要加）\n\n**補上稅額上限**\n- 理由：建議設定稅額上限，以便在最大化模式下有效控制稅負，避免超出預算。\n\n**增加再製酒類數量**\n- 理由：考慮增加再製酒類的數量，因其稅率相對較低，能有效降低總稅負。\n\n**優化蒸餾酒類配置**\n- 理由：調整蒸餾酒類的數量與酒精度，以達到最佳稅負平衡，根據手冊中的稅率計算。",
+    "op": "maximize"
+  },
+  "markdown": "### 菸酒稅\n在目前前提與約束下，**最大商品量**為 **16,397**。稅額使用 499,993 / 上限 500,000（使用率 100.0%，餘額 7）。\n\n#### 重點數據\n- **計算模式**：maximize\n- **輸入稅額**：385,770\n- **比較基準**：基準 385,770\n- **使用稅額 / 最佳稅額**：499,993\n- **最大商品量**：16,397\n- **稅額上限**：500,000\n- **上限使用率**：100.0%\n- **稅額餘額**：7\n\n#### 參數調整（與原輸入相比）\n- 其他酒類- 數量：0 → 150（↑ 150）\n- 蒸餾酒類- 數量：0 → 500（↑ 500）\n- 料理酒- 數量：0 → 6,247（↑ 6,247）\n\n#### 與上一輪相比的參數變化\n（無上一輪可比較）\n\n#### 套用的約束\n- 料理酒- 數量 + 酒精- 數量 >= 2,500\n- 其他酒類- 數量 >= 0.3 × 蒸餾酒類- 數量\n- 蒸餾酒類- 數量 >= 500\n- 釀造 → 啤酒- 數量 >= 1.5 × 釀造 → 其他- 數量\n\n#### 輸入稅額的參數\n- 紙菸-新制- 數量：0\n- 菸絲-新制- 數量：0\n- 雪茄-新制- 數量：0\n- 其他菸品-新制- 數量：0\n- 紙菸-舊制- 數量：3,000\n- 菸絲-舊制- 數量：0\n- 雪茄-舊制- 數量：0\n- 其他菸品-舊制- 數量：0\n- 釀造 → 啤酒- 數量：0\n- 釀造 → 其他- 數量：0\n- 釀造 → 其他- 酒精度：0\n- 蒸餾酒類- 數量：0\n- 蒸餾酒類- 酒精度：38\n- 再製 >20%- 數量：2,000\n- 再製 ≤20%- 數量：3,500\n- 再製 ≤20%- 酒精度：0\n- 料理酒- 數量：0\n- 料理酒-舊- 數量：0\n- 其他酒類- 數量：0\n- 其他酒類- 酒精度：10\n- 酒精- 數量：0\n- 酒精-舊- 數量：1,000\n\n#### 目前最佳解輸入值\n- 紙菸-新制- 數量：0（預設）\n- 菸絲-新制- 數量：0（預設）\n- 雪茄-新制- 數量：0（預設）\n- 其他菸品-新制- 數量：0（預設）\n- 紙菸-舊制- 數量：3,000（預設）\n- 菸絲-舊制- 數量：0（預設）\n- 雪茄-舊制- 數量：0（預設）\n- 其他菸品-舊制- 數量：0（預設）\n- 釀造 → 啤酒- 數量：0（建議）\n- 釀造 → 其他- 數量：0（建議）\n- 釀造 → 其他- 酒精度：0（預設）\n- 蒸餾酒類- 數量：500（建議）\n- 蒸餾酒類- 酒精度：38（預設）\n- 再製 >20%- 數量：2,000（預設）\n- 再製 ≤20%- 數量：3,500（預設）\n- 再製 ≤20%- 酒精度：0（預設）\n- 料理酒- 數量：6,247（建議）\n- 料理酒-舊- 數量：0（預設）\n- 其他酒類- 數量：150（建議）\n- 其他酒類- 酒精度：10（預設）\n- 酒精- 數量：0（建議）\n- 酒精-舊- 數量：1,000（預設）\n\n#### 結論\n- 可考慮增加釀造啤酒的數量，若符合資格可申報相關稅務優惠。\n- 若有其他酒類的產出，建議確認其數量及酒精度，可能有助於減少稅負。\n- 可考慮檢視料理酒的使用量，若符合規定可申報以獲得稅務優惠。\n- 若有蒸餾酒類的生產，建議確認其數量及酒精度，以符合申報要求。\n- 建議檢查再製酒類的數量，若符合規定可申報以減少稅負。\n\n#### 風險與合規備註\n- 本報告為模型推導之**估算**，實際稅負仍以主管機關規定與申報資料為準。\n- 涉及扣除認列、薪資結構等請務必依據法規與憑證（避免規避稅捐風險）。"
+}

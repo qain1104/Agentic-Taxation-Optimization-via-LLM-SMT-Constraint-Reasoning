@@ -1,0 +1,42 @@
+autogen==0.9.2
+autogen_agentchat==0.2.36
+
+# API framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+httpx==0.28.1
+pydantic==2.10.4
+
+# Agents / Embeddings / LLM
+openai==1.95.1
+langchain-community==0.3.27
+langchain-openai==0.3.28
+langchain-chroma>=0.1.0
+chromadb==1.0.15
+
+# Z3 / Optimization / Math
+z3-solver==4.14.1.0
+gurobipy==12.0.2
+scikit-learn==1.7.0
+
+# Web / Frontend
+flask==3.1.0
+gradio==5.37.0
+tinycss2==1.4.0
+
+# File / PDF / Parsing
+pypdf==6.1.1
+tomli==2.0.1
+
+# Networking / low-level
+httptools==0.6.4
+pysocks==1.7.1
+watchfiles==1.1.0
+
+# Kernel / notebook (optional, but kept)
+ipykernel==6.29.5
+
+# Utilities
+exceptiongroup==1.2.2
+jaraco.collections==5.1.0
+grpcio-status==1.71.2

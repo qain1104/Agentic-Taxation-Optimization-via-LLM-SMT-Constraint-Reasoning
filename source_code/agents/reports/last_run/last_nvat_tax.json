@@ -1,0 +1,199 @@
+{
+  "ts": 1764816206,
+  "tool_name": "nvat_tax",
+  "mode": "maximize",
+  "status": "sat",
+  "baseline": 33000,
+  "optimized": 1200000,
+  "budget": 1200000,
+  "result": {
+    "mode": "maximize",
+    "baseline": 33000,
+    "baseline_items": [
+      {
+        "category": 1,
+        "sales_val": 500000,
+        "tax": 5000
+      },
+      {
+        "category": 2,
+        "sales_val": 800000,
+        "tax": 8000
+      },
+      {
+        "category": 3,
+        "sales_val": 1000000,
+        "tax": 20000
+      },
+      {
+        "category": 4,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 5,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 6,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 7,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 8,
+        "sales_val": 0,
+        "tax": 0
+      }
+    ],
+    "baseline_total_sales": 2300000,
+    "baseline_status": "unsat",
+    "baseline_with_constraints": null,
+    "optimized_total_tax": 1200000,
+    "optimized_total_sales": 45388571,
+    "optimized_items": [
+      {
+        "category": 1,
+        "sales_val": 500000,
+        "tax": 5000
+      },
+      {
+        "category": 2,
+        "sales_val": 800000,
+        "tax": 8000
+      },
+      {
+        "category": 3,
+        "sales_val": 33914285,
+        "tax": 678285
+      },
+      {
+        "category": 4,
+        "sales_val": 10174285,
+        "tax": 508714
+      },
+      {
+        "category": 5,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 6,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 7,
+        "sales_val": 0,
+        "tax": 0
+      },
+      {
+        "category": 8,
+        "sales_val": 0,
+        "tax": 0
+      }
+    ],
+    "param_diff": {
+      "cat3": {
+        "original": 1000000,
+        "optimized": 33914285,
+        "difference": -32914285
+      },
+      "cat4": {
+        "original": 0,
+        "optimized": 10174285,
+        "difference": -10174285
+      }
+    },
+    "free_vars": [
+      "cat4",
+      "cat3",
+      "cat5"
+    ],
+    "constraints": {
+      "cat4": {
+        ">=": "cat3 * 0.3"
+      },
+      "cat5": {
+        "<=": "cat3 * 0.5"
+      }
+    },
+    "budget_tax": 1200000,
+    "final_params": {
+      "cat1": {
+        "value": 500000,
+        "type": "fixed"
+      },
+      "cat2": {
+        "value": 800000,
+        "type": "fixed"
+      },
+      "cat3": {
+        "value": 33914285,
+        "type": "free"
+      },
+      "cat4": {
+        "value": 10174285,
+        "type": "free"
+      },
+      "cat5": {
+        "value": 0,
+        "type": "free"
+      },
+      "cat6": {
+        "value": 0,
+        "type": "fixed"
+      },
+      "cat7": {
+        "value": 0,
+        "type": "fixed"
+      },
+      "cat8": {
+        "value": 0,
+        "type": "fixed"
+      },
+      "total_tax": {
+        "value": 1200000,
+        "type": "derived"
+      },
+      "total_sales": {
+        "value": 45388571,
+        "type": "derived"
+      }
+    },
+    "status": "sat"
+  },
+  "payload": {
+    "tool_name": "nvat_tax",
+    "user_params": {
+      "cat1": 500000,
+      "cat2": 800000,
+      "cat3": 1000000,
+      "budget_tax": 1200000,
+      "free_vars": [
+        "cat4",
+        "cat3",
+        "cat5"
+      ],
+      "constraints": {
+        "cat4": {
+          ">=": "cat3 * 0.3"
+        },
+        "cat5": {
+          "<=": "cat3 * 0.5"
+        }
+      }
+    },
+    "raw_query": "下一步",
+    "timestamp": "2025-12-04T02:42:42.804274",
+    "__prev_tax__": null,
+    "early_tips_md": "#### 條件式建議（先看再決定要不要加）\n\n**補上稅額上限**\n- 理由：建議設定稅額上限以確保最佳化過程中不超過預算，避免不必要的稅務負擔。\n\n**調整銷售額比例**\n- 理由：根據不同類別的稅率，調整各類別的銷售額比例，以最大化稅額抵扣效果。\n\n**檢視可放行變數**\n- 理由：檢查可放行變數的設定，確保其符合當前稅務策略，並能有效利用稅務優惠。",
+    "op": "maximize"
+  },
+  "markdown": "### 非加值型營業稅\n在目前前提與約束下，**最大銷售額**為 **45,388,571**。稅額使用 1,200,000 / 上限 1,200,000（使用率 100.0%，餘額 0）。\n\n#### 重點數據\n- **計算模式**：maximize\n- **求解狀態**：sat\n- **輸入稅額**：33,000\n- **比較基準**：基準 33,000\n- **使用稅額 / 最佳稅額**：1,200,000\n- **最大銷售額**：45,388,571\n- **稅額上限**：1,200,000\n- **上限使用率**：100.0%\n- **稅額餘額**：0\n- **註**：若基準無解，仍可能在你的約束內找到可行最佳化解。\n\n#### 參數調整（與原輸入相比）\n- 金融等業專屬本業：1,000,000 → 33,914,285（↓ 32,914,285）\n- 銀行/保險本業：0 → 10,174,285（↓ 10,174,285）\n\n#### 與上一輪相比的參數變化\n（無上一輪可比較）\n\n#### 套用的約束\n- 銀行/保險本業（銷售額，元） >= 金融等業專屬本業（銷售額，元） × 0.3\n- 金融等非專屬本業（銷售額，元） <= 金融等業專屬本業（銷售額，元） × 0.5\n\n#### 輸入稅額的參數\n- 小規模營業人：500,000\n- 再保費收入：800,000\n- 金融等業專屬本業：1,000,000\n- 稅額上限：1,200,000\n\n#### 目前最佳解輸入值\n- 小規模營業人：500,000（預設）\n- 再保費收入：800,000（預設）\n- 金融等業專屬本業：33,914,285（建議）\n- 銀行/保險本業：10,174,285（建議）\n- 金融等非專屬本業：0（建議）\n- 夜總會：0（預設）\n- 酒家等：0（預設）\n- 農產品批發市場：0（預設）\n- total_tax：1,200,000（預設）\n- total_sales：45,388,571（預設）\n\n#### 結論\n- 可考慮檢視金融等業專屬本業（cat3）銷售額的增長，若符合資格可申報相關稅務優惠。\n- 若符合資格，可考慮將銀行/保險本業（cat4）銷售額提升至法定上限，以降低稅負。\n- 可考慮檢查金融等非專屬本業（cat5）的銷售額，若有增加可申報相關稅務減免。\n- 可考慮將夜總會（cat6）及酒家等（cat7）銷售額進行合理規劃，以符合稅務優惠條件。\n- 若符合資格，建議檢視再保費收入（cat2）的報告，確保所有可申報項目均已納入。\n\n#### 風險與合規備註\n- 本報告為模型推導之**估算**，實際稅負仍以主管機關規定與申報資料為準。\n- 涉及扣除認列、薪資結構等請務必依據法規與憑證（避免規避稅捐風險）。"
+}
