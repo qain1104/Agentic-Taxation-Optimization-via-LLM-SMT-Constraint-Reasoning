@@ -5,7 +5,7 @@ This repository contains the artifact for the ICSE 2026 SEIP paper:
 > **Agentic Taxation Optimization via LLM SMT-Constraint Reasoning**  
 > _ICSE 2026 — Software Engineering in Practice (SEIP)_
 
-The artifact includes the full implementation of the agentic tax optimization system, together with the data and scripts needed to reproduce the main experimental results (RQ1, RQ2, and a planned RQ3).
+The artifact includes the full implementation of the agentic tax optimization system, together with the data and scripts needed to reproduce the main experimental results (RQ1, RQ2, and RQ3).
 
 ---
 
@@ -14,14 +14,16 @@ The artifact includes the full implementation of the agentic tax optimization sy
 We intend this artifact to qualify for the following ICSE / ACM badges:
 
 - **Artifacts Available**  
-  - The full artifact (source code, data, and scripts) will be archived on a long-term repository (e.g., Zenodo) and linked from the camera-ready paper.
-- **Artifacts Evaluated — Reusable**  
-  - The artifact is documented and structured to support reuse and extension beyond the paper’s experiments, e.g., adapting the pipeline to other tax regimes or constraint problems.
+  The full artifact (source code, data, and scripts) will be archived on a long-term repository (e.g., Zenodo) and linked from the camera-ready paper.
 
-> **Provenance & DOI**  
-> - Paper: _Agentic Taxation Optimization via LLM SMT-Constraint Reasoning_ (ICSE 2026 SEIP).  
-> - Preprint: `<add arXiv / institutional link here, if any>`  
-> - Archived artifact DOI: `<add Zenodo / Figshare DOI here>`  
+- **Artifacts Evaluated — Reusable**  
+  The artifact is documented and structured to support reuse and extension beyond the paper’s experiments, e.g., adapting the pipeline to other tax regimes or constraint problems.
+
+**Provenance**
+
+- Paper: _Agentic Taxation Optimization via LLM SMT-Constraint Reasoning_ (ICSE 2026 SEIP).  
+- Preprint: <!-- TODO: add arXiv / institutional link if available -->  
+- Archived artifact DOI: <!-- TODO: add Zenodo / Figshare DOI once created -->
 
 ---
 
@@ -41,10 +43,315 @@ At the top level, the repository is organized as follows:
 │   ├── docker-compose.yml
 │   ├── requirements.txt
 │   ├── app.py
-│   ├── main.py
-│   └── Readme.md     # System-level notes (shipped as-is from the project)
-├── rq1/              # Material for RQ1: Constraint Code Synthesis
-├── rq2/              # Material for RQ2: Constraint Code Accuracy
-├── rq3/              # Material for RQ3: Tax-planning Optimization
+│   ├── multi_agent_tax_system.py
+│   └── Readme.md     # Original system-level notes
+├── rq1/              # Material for RQ1: correctness / portal-alignment experiments
+├── rq2/              # Material for RQ2: optimization / baseline comparison
+├── rq3/              # (planned) Material for RQ3
 ├── LICENSE
 └── README.md         # Artifact-level README (this file)
+```
+
+### `source_code/`
+
+This directory contains the implementation of the agentic tax optimization service and all runtime configuration:
+
+- `agents/`  
+  - Multi-agent orchestration and tool registry (Caller / Constraint / Execute / Reasoning).  
+  - Frontends such as:
+    - `app_fastapi.py` — HTTP API (used for automated evaluation).  
+    - `app_gradio.py` — Gradio UI (interactive demo).
+  - Integrations in `agents/integrations/` (e.g., FIN backend webhook).
+
+- `tax_calculators/`  
+  - Per-tax-type calculators, each with its own generated Z3 SMT constraint modules, e.g.:
+    - `income_tax.py`
+    - `business_income_tax.py`
+    - `gift_tax.py`
+    - `tobacco_alcohol_tax.py`
+    - …and others.  
+  - Shared helpers such as `tax_calculator.py`, `constraint_utils.py`, `util.py`.
+
+- `parsers/`  
+  - RAG utilities and the report renderer used by the Reasoning agent.
+
+- `reports/`  
+  - Report rendering templates and, at runtime, the directory where the latest reports are written under `reports/last_run/` (see below).
+
+- `logs/`  
+  - Runtime log directory. The main rotating log file is `logs/tax_app.log` inside the container (or local directory when running locally).
+
+- `Dockerfile`, `docker-compose.yml`  
+  - Container and compose files **live inside `source_code/`**.  
+  - Used to build and run the system as a self-contained service for this artifact.
+
+- `requirements.txt`  
+  - Python dependencies for running the backend without Docker.
+
+- `Readme.md` (inside `source_code/`)  
+  - Original system-level notes from the development repository (left largely unchanged).
+
+> If you are only interested in using the system as a service, `source_code/` together with the Docker configuration is all you need.
+
+### `rq1/`
+
+Artifacts related to **RQ1** (e.g., “Can we exactly reproduce the ministry portal’s tax computation?”):
+
+- Scenario definitions comparing our system against the official portal.
+- Scripts to run the RQ1 evaluation and collect metrics.
+- Aggregated results used to produce the tables and figures in the paper.
+- A dedicated `rq1/README.md` describing the exact commands to reproduce RQ1.
+
+### `rq2/`
+
+Artifacts related to **RQ2: Generalization to Unseen Inputs / Constraint Code Accuracy**:
+
+- Random test-case generators that sample inputs within each portal field’s domain while respecting UI guards (e.g., spouse fields only when `married=true`, valid ranges/enums, precision constraints).
+- Scripts to run Monte-Carlo validation by comparing our synthesized SMT solvers against the official MoF eTax calculators on large batches of unseen cases per regime.
+- Collected mismatch logs (if any), per-regime accuracy summaries, and scripts to regenerate the accuracy numbers reported in the paper (solver = 100% vs GPT-5-level prompt-only baseline).
+- A dedicated `rq2/README.md` describing the exact commands to reproduce the RQ2 experiments.
+
+### `rq3/`
+
+Artifacts related to **RQ3: Optimizing Real-World Tax Decisions**:
+
+- The 20 natural-language tax-planning tasks across ten Taiwanese tax regimes used in the paper (e.g., minimizing consolidated income tax under constraints, maximizing purchasable quantity under a tax cap).
+- Prompt templates and evaluation harnesses that translate NL tasks into our symbolic optimization calls (LLM + Z3 Optimize) and into the GPT-5-level baseline with Chain-of-Thought and browsing.
+- Result files with per-task optimality and latency measurements, plus scripts to recompute the summary table comparing our system against the LLM baseline.
+- A dedicated `rq3/README.md` describing how to run both systems and reproduce the RQ3 results end-to-end.
+
+---
+
+## Requirements
+
+### Hardware
+
+- CPU: any modern x86-64 CPU; 4+ cores recommended.
+- RAM: **8 GB** minimum; **16 GB** recommended for larger batches.
+- Disk: at least **5 GB** free (Docker image + logs + reports).
+- GPU: **not required** for the SMT/agentic backend.  
+  LLM calls are made via external APIs; no local GPU inference is performed.
+
+### Software
+
+You can run the artifact in two ways:
+
+1. **Docker (recommended)**
+   - Docker Engine ≥ 24.x
+   - Docker Compose plugin
+
+2. **Local Python environment**
+   - Python ≥ 3.10
+   - `pip` and ability to install standard scientific / web packages.
+
+### External Services / Secrets
+
+The system uses remote LLM and (optionally) integration endpoints:
+
+- An LLM API key (e.g., `OPENAI_API_KEY`).  
+- Optional: internal URLs for the tax portal and FIN backend (`FIN_BACKEND_BASEURL`, etc.).
+
+For artifact evaluation, we provide configuration presets that:
+
+- Disable calls to production government systems.  
+- Either use the LLM API directly or rely on cached responses / stubs when no key is available (see the `rq*` READMEs).
+
+The exact environment variables are documented in:
+
+- `source_code/Readme.md`, and  
+- `.env.example` next to `source_code/docker-compose.yml` (if provided).
+
+---
+
+## Setup
+
+### Option A: Docker (recommended path)
+
+1. **Clone the repository**
+
+```bash
+git clone https://github.com/<ORG>/<REPO>.git   # TODO: replace with real URL
+cd <REPO>                                      # TODO: replace with real folder name
+```
+
+2. **Enter `source_code/`**
+
+```bash
+cd source_code
+```
+
+3. **Create a `.env` file**
+
+If a `.env.example` is provided:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set at least:
+
+```text
+OPENAI_API_KEY=your-api-key-here
+# FIN_BACKEND_BASEURL=http://example-fin-backend:6677
+# TAX_LOG_DIR=/app/logs
+# (Add other variables as needed; see source_code/Readme.md)
+```
+
+4. **Build and start the backend**
+
+```bash
+docker compose build
+docker compose up
+```
+
+This will:
+
+- Build a container image for the agentic backend from `source_code/`.  
+- Start the service exposing its UI / API on port **32770** (as configured in `docker-compose.yml`).
+
+5. **Basic smoke test**
+
+- If the Gradio UI is enabled as the container entrypoint, open a browser:  
+
+  http://localhost:32770
+
+  You should see the UI.
+
+- If the FastAPI HTTP API is enabled, you can also issue a health check:
+
+  ```bash
+  curl http://localhost:32770/health
+  ```
+
+  Expected output:
+
+  ```json
+  { "status": "ok", "time": "..." }
+  ```
+
+This confirms that the containerized artifact is installed and running.
+
+---
+
+### Option B: Local Python install (alternative)
+
+> This path is provided for users who prefer not to use Docker.  
+> Docker remains the recommended option for artifact evaluation.
+
+1. **Create and activate a virtual environment**
+
+```bash
+cd source_code
+python3 -m venv .venv
+source .venv/bin/activate      # On Windows: .venv\Scripts\activate
+```
+
+2. **Install dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+3. **Set environment variables**
+
+```bash
+export OPENAI_API_KEY=your-api-key-here
+# export TAX_LOG_DIR=./logs
+# export FIN_BACKEND_BASEURL=http://example-fin-backend:6677
+# (Others as required)
+```
+
+4. **Run the backend**
+
+Choose one of the entrypoints:
+
+- **Gradio UI**
+
+  ```bash
+  python agents/app_gradio.py
+  ```
+
+- **HTTP API (FastAPI)**
+
+  ```bash
+  python agents/app_fastapi.py
+  ```
+
+The service will listen on the port configured in the corresponding app (by default 32770).
+
+---
+
+## Basic API Usage Example
+
+Once the HTTP API is running (via Docker or `app_fastapi.py`), you can interact with the REST endpoints.
+
+### 1. Health check
+
+```bash
+curl http://localhost:32770/health
+```
+
+### 2. Single optimization run (`/run`)
+
+```bash
+curl -X POST http://localhost:32770/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool_name": "income_tax",
+    "user_params": {
+      "is_married": false,
+      "salary_income": 1200000,
+      "other_income": 0,
+      "standard_deduction": true
+    },
+    "constraints": {},
+    "free_vars": [],
+    "op": "minimize",
+    "budget_tax": null
+  }'
+```
+
+Example response (simplified):
+
+```json
+{
+  "status": "ok",
+  "kpi": {
+    "tax_before": 123456,
+    "tax_after": 98765
+  },
+  "final_params": { "...": "..." },
+  "diff": { "...": "..." },
+  "report_md": "## Tax optimization report\n..."
+}
+```
+
+### 3. Export latest report (`/export`)
+
+```bash
+curl -X POST http://localhost:32770/export \
+  -H "Content-Type: application/json" \
+  -d '{
+    "format": "both",
+    "push_to_fin": false
+  }'
+```
+
+The response includes:
+
+- `title` — report title  
+- `md` — Markdown report content  
+- `json` — JSON-structured report  
+- `delivery` — delivery status if `push_to_fin=true`
+
+At the file-system level, the latest report and delivery logs are also stored under:
+
+```text
+source_code/reports/last_run/
+    ├── last.md
+    ├── last.json
+    ├── last.sent.log
+    └── last.sent.response.json
+```
+
+---
