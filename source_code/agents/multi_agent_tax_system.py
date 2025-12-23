@@ -19,6 +19,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import time
 import logging
 import os
 import re
@@ -657,6 +658,11 @@ class CallerAgent(BaseAgent):
     def _wants_skip(self, text: str) -> bool:
         t = (text or "").strip().lower()
         return bool(re.search(r"(跳過|全部跳過|直接算|先算|用預設|預設0|都用0|default\s*0|skip)", t))
+
+    def _wants_direct_compute(self, text: str) -> bool:
+        """使用者要求『直接計算』：跳過階段頁，直接開始工具計算。"""
+        t = (text or "").strip().lower()
+        return bool(re.search(r"(直接\s*(?:開始\s*)?計算|直接计算|立刻\s*計算|立即\s*計算|馬上\s*計算|马上\s*计算|compute\s*now|run\s*now|direct\s*calc)", t, flags=re.I))
     def _explicit_correction(self, text: str) -> bool:
         return bool(re.search(r"(更正|改成|修正|修改)", text or ""))
 
@@ -845,9 +851,7 @@ class CallerAgent(BaseAgent):
         """
         header = self._fmt_vars_overview(tool_name)
         preview = self._inline_current_inputs(tool_name, merged_slots)
-        # tail = "\n\n> 若要再加變數，直接輸入；若完成設定，回覆「下一步」。"
-        # return header + ("\n\n" + preview if preview else "") + tail
-        tail = "\n\n> 若要再加變數，直接輸入；若完成設定，回覆「下一步」。"
+        tail = "\n\n> 若要再加變數，直接輸入；若完成設定，回覆「下一步」；若要直接計算，回覆「直接計算」。"
         # 插入階段一規則說明
         rules = "\n\n" + RULES_NOTE_STAGE1
         return header + ("\n\n" + preview if preview else "") + rules + tail
@@ -1332,7 +1336,7 @@ class CallerAgent(BaseAgent):
         last_tool = self.memory.get("last_tool")
         switched_tool = bool(last_tool and last_tool != tool_name and not sticky_tool)
         if switched_tool:
-            self.memory.set("filled_slots", {})
+            self.memory.set("filled_slots", merged_slots)
             self.memory.set("pending_missing", None)
             self.memory.set("pending_constraint_payload", None)
             self.memory.set("pending_tool_for_constraints", None)
@@ -1392,21 +1396,32 @@ class CallerAgent(BaseAgent):
                     if maybe: merged_slots[fld] = maybe
 
         # === 階段一：可設定欄位總覽（不吃變數） ===
+        force_direct = self._wants_direct_compute(user_msg)
         stage = self.memory.get("stage")
         if switched_tool or stage is None:
-            self.memory.set("stage", "inputs")
+            # 先存一份目前解析到的值，讓下一輪可接續累積
             self.memory.set("pending_tool", tool_name)
-            self.memory.set("filled_slots", {})
-            return {
-                "type": "follow_up",
-                "stage": "inputs",
-                "tool_name": tool_name,
-                "question": self._compose_inputs_page(tool_name, merged_slots),
-            }
+            self.memory.set("filled_slots", merged_slots)
+
+            # 若使用者輸入『直接計算』，不要停在階段一頁面，直接往下建立 tool_request
+            if force_direct:
+                self.memory.set("stage", "constraints")
+                stage = "constraints"
+            else:
+                self.memory.set("stage", "inputs")
+                return {
+                    "type": "follow_up",
+                    "stage": "inputs",
+                    "tool_name": tool_name,
+                    "question": self._compose_inputs_page(tool_name, merged_slots),
+                }
 
         # === 單一輸入階段：吃變數直到下一步 ===
         if stage == "inputs":
-            if _is_next_local(user_msg) or self._wants_skip(user_msg):
+            if force_direct:
+                self.memory.set("stage", "constraints")
+                self.memory.set("filled_slots", merged_slots)
+            elif _is_next_local(user_msg) or self._wants_skip(user_msg):
                 self.memory.set("stage", "constraints")
                 self.memory.set("filled_slots", merged_slots)
             else:
@@ -1456,6 +1471,10 @@ class CallerAgent(BaseAgent):
         budget_val = merged_slots.get(budget_field) if budget_field else None
         if (not op_text or op_text != "minimize") and isinstance(budget_val, (int, float)) and budget_val > 0:
             op = "maximize"
+
+        # 使用者要求『直接計算』：讓 ConstraintAgent 直接進入執行
+        if force_direct:
+            request_payload["__direct_execute__"] = True
 
         self.memory.set("op", op)
 
@@ -2887,7 +2906,8 @@ class ConstraintAgent(BaseAgent):
             f"{header}\n\n{params_md}\n\n{tips_md}\n\n{howto_md}\n\n{preview_md}\n\n"
             "直接輸入條件即可新增；若不想加條件，回覆「無」。\n"
             "準備好要計算時，回覆「下一步」（會先進入最終確認）。\n"
-            "若要清空所有條件重新設定，輸入「重設條件」。"
+            "若要清空所有條件重新設定，輸入「重設條件」。\n"
+            "若要直接計算，回覆「直接計算」。"
         )
         return {"type": "follow_up", "stage": "constraints", "question": question, "tool_name": tool}
 
@@ -2925,6 +2945,14 @@ class ConstraintAgent(BaseAgent):
         if stage == "tool_request":
             payload = obj.get("payload") or {}
             tool = payload.get("tool_name")
+            # 使用者要求『直接計算』：跳過條件/最終確認，直接執行工具
+            if payload.get("__direct_execute__"):
+                dbg = self.memory.get("debug_lines", [])
+                self.memory.set("debug_lines", [])
+                self.memory.set("await_execute_confirm", False)
+                self.memory.set("pending_constraint_payload", None)
+                self.memory.set("pending_tool_for_constraints", None)
+                return {"type": "ready_for_execute", "payload": payload, "debug": dbg}
             # ---- 確保 __prev_tax__ 在進入條件階段就跟著 payload 走 ----
             if "__prev_tax__" not in payload:
                 try:
@@ -2952,13 +2980,22 @@ class ConstraintAgent(BaseAgent):
                 f"{header}\n\n{params_md}\n\n{tips_md}\n\n{howto_md}\n\n{preview_md}\n\n"
                  "直接輸入條件即可新增；若不想加條件，回覆「無」。\n"
                  "準備好要計算時，回覆「下一步」（會先進入最終確認）。\n"
-                 "若要清空所有條件重新設定，輸入「重設條件」。"
+                 "若要清空所有條件重新設定，輸入「重設條件」。\n"
+                 "若要直接計算，回覆「直接計算」。" 
              )
             return {"type": "follow_up", "stage": "constraints", "question": question, "tool_name": tool}
 
         # 條件輸入迴路
         if stage == "constraints_reply":
             text = (obj.get("text") or "").strip()
+            if re.search(r"(直接\s*(?:開始\s*)?計算|直接计算|立刻\s*計算|立即\s*計算|馬上\s*計算|马上\s*计算|compute\s*now|run\s*now|direct\s*calc)", text, flags=re.I):
+                payload = self.memory.get("pending_constraint_payload") or {}
+                dbg = self.memory.get("debug_lines", [])
+                self.memory.set("debug_lines", [])
+                self.memory.set("await_execute_confirm", False)
+                self.memory.set("pending_constraint_payload", None)
+                self.memory.set("pending_tool_for_constraints", None)
+                return {"type": "ready_for_execute", "payload": payload, "debug": dbg}
             awaiting = bool(self.memory.get("await_execute_confirm"))
             payload = self.memory.get("pending_constraint_payload") or {}
             cur_tool = self.memory.get("pending_tool_for_constraints")
@@ -3293,6 +3330,47 @@ class ExecuteAgent(BaseAgent):
 
 
 class ReasoningAgent(BaseAgent):
+    # ===== Perf tracing (ReasoningAgent) =====
+    def _perf_reset(self) -> None:
+        self._perf_spans: list[tuple[str, float]] = []
+        self._perf_handle_t0 = None
+
+    def _perf_add(self, phase: str, dt: float) -> None:
+        try:
+            self._perf_spans.append((str(phase), float(dt)))
+        except Exception:
+            pass
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _perf_span(self, phase: str):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._perf_add(phase, time.perf_counter() - t0)
+
+    def _perf_finalize_spans(self) -> list[tuple[str, float]]:
+        try:
+            t0 = getattr(self, "_perf_handle_t0", None)
+            spans = getattr(self, "_perf_spans", None)
+            if isinstance(spans, list) and isinstance(t0, (int, float)):
+                if not any((p[0] == "handle_total") for p in spans):
+                    spans.append(("handle_total", float(time.perf_counter() - t0)))
+            out = list(spans) if isinstance(spans, list) else []
+            try:
+                self.memory.set("perf_spans_last", out)
+            except Exception:
+                pass
+            return out
+        except Exception:
+            return []
+
+    async def _chat_traced(self, phase: str, sys_prompt: str, user_msg: str, **kwargs) -> str:
+        with self._perf_span(f"llm:{phase}"):
+            return await self._chat(sys_prompt, user_msg, **kwargs)
+
     """
     規格驅動通用報告引擎（單次 LLM 成稿版）
     """
@@ -3693,14 +3771,21 @@ class ReasoningAgent(BaseAgent):
         }
 
         sys = (
-            "你是台灣稅務顧問。僅依『本輪計算結果』提供 2–5 條**保守且可操作**的節稅建議："
-            "避免臆測法定數字與門檻；不要捏造證據；盡量指向可調欄位/可補強的證明/可評估的資格；"
-            "用語請採『可考慮…』『若符合資格…可申報…』；每條 ≤ 80 字；只輸出 JSON："
-            "{\"advice\":[\"…\",\"…\"]}"
+            "你是台灣稅務最佳化報告的『行動建議產生器』。\n"
+            "你只能根據輸入 JSON 的 ctx.deltas 來產生建議；ctx.sources 只能用來補充『為何會降稅』的理由，不可引入新變數。\n"
+            "嚴格規則：\n"
+            "1) 每一條建議都必須引用至少一個 delta（用 label + original→optimized），不可以提到任何不在 deltas 內的變數。\n"
+            "2) 每一條建議都必須附上『背後原因』：需明確指出利用的稅務機制，及該建議所須繳納的稅額，還有他怎麼算出來的。\n"
+            "3) 不要用『若有…』『可能…』臆測使用者狀況；只描述『本輪最佳化是怎麼改、為何會降稅』。\n"
+            "4) 輸出中文，每條建議一行\n"
+            "5) 若 deltas 為空：仍要輸出少量 advice（禁止輸出「本輪沒有可用的最佳化變數變動，因此無法提供調整建議。」）。\n"
+            "   - 先說明本輪『最佳解與基準相同／在現有約束下無更優解』。\n"
+            "   - 再用幾個要點簡述本稅種的『稅額計算流程』，並給出可擴大最佳化空間的下一步（例如放寬 free_vars/加入結構性約束）。\n"
+            "輸出必須是嚴格 JSON：{\"advice\":[\"...\"]}，不要輸出多餘文字。"
         )
         user = json.dumps(ctx, ensure_ascii=False)
 
-        txt = await self._chat(sys, user, temperature=0.2)
+        txt = await self._chat_traced('advice_json_basic', sys, user, temperature=0.2)
         try:
             obj = json.loads(txt) if isinstance(txt, str) else {}
             adv = obj.get("advice")
@@ -3768,6 +3853,7 @@ class ReasoningAgent(BaseAgent):
             chunks.append(txt)
 
         try:
+            t_mmr0 = time.perf_counter()
             for q in queries:
                 try:
                     mmr_hits = db.max_marginal_relevance_search(q, k=k, fetch_k=k*3)
@@ -3796,6 +3882,8 @@ class ReasoningAgent(BaseAgent):
                     except Exception:
                         pass
 
+            self._perf_add('rag:similarity_total', time.perf_counter() - t_sim0)
+
             uniq = []
             seen = set()
             for src in sources:
@@ -3810,25 +3898,52 @@ class ReasoningAgent(BaseAgent):
             sources, chunks = [], []
 
         if chunks:
+            diffs = result.get("diff") or {}
+            final_params = result.get("final_params") or {}
+            deltas = []
+            if isinstance(diffs, dict):
+                for k, meta in diffs.items():
+                    if not isinstance(meta, dict):
+                        continue
+                    orig = meta.get("original")
+                    optv = meta.get("optimized")
+                    delta = meta.get("difference")
+                    if not isinstance(orig, (int, float)) or not isinstance(optv, (int, float)):
+                        continue
+                    deltas.append({
+                        "key": k,
+                        "label": labels.get(k, k),
+                        "original": orig,
+                        "optimized": optv,
+                        "delta": delta if isinstance(delta, (int, float)) else (optv - orig),
+                    })
             ctx = {
                 "tool_name": tool_name,
                 "mode": mode,
                 "baseline": baseline,
                 "optimized": optimized,
-                "deltas": [],
+                "deltas": deltas,
                 "constraints": constraints,
                 "final_params": final_params,
                 "field_labels": labels,
                 "handbook_evidence": chunks[:6],
             }
             sys = (
-                "你是台灣稅務顧問。依據『本輪計算結果』與『手冊片段』，輸出 2–5 條**具體、可執行**的節稅建議："
-                "每條 ≤ 80 字；指明可調欄位/上限/必要憑證要點；若片段揭示限額或資格，請直接點出；"
-                "禁止臆測未出現在片段與結果中的硬性規定。只輸出 JSON：{\"advice\":[\"…\",\"…\"]}"
+                "你是台灣稅務最佳化報告的『行動建議產生器』。\n"
+                "你只能根據輸入 JSON 的 ctx.deltas 來產生建議；ctx.sources 只能用來補充『為何會降稅』的理由，不可引入新變數。\n"
+                "嚴格規則：\n"
+                "1) 每一條建議都必須引用至少一個 delta（用 label + original→optimized），不可以提到任何不在 deltas 內的變數。\n"
+                "2) 每一條建議都必須附上『背後原因』：需明確指出利用的稅務機制，及該建議所須繳納的稅額，還有他怎麼算出來的。\n"
+                "3) 不要用『若有…』『可能…』臆測使用者狀況；只描述『本輪最佳化是怎麼改、為何會降稅』。\n"
+                "4) 輸出中文，每條建議一行\n"
+                "5) 若 deltas 為空：仍要輸出少量 advice（禁止輸出「本輪沒有可用的最佳化變數變動，因此無法提供調整建議。」）。\n"
+                "   - 先說明本輪『最佳解與基準相同／在現有約束下無更優解』。\n"
+                "   - 再用幾個要點簡述本稅種的『稅額計算流程』，並給出可擴大最佳化空間的下一步（例如放寬 free_vars/加入結構性約束）。\n"
+                "輸出必須是嚴格 JSON：{\"advice\":[\"...\"]}，不要輸出多餘文字。"
             )
             user = json.dumps(ctx, ensure_ascii=False)
 
-            txt = await self._chat(sys, user, temperature=0.2)
+            txt = await self._chat_traced('advice_json_basic', sys, user, temperature=0.2)
             try:
                 obj = json.loads(txt) if isinstance(txt, str) else {}
                 adv = obj.get("advice")
@@ -3879,6 +3994,13 @@ class ReasoningAgent(BaseAgent):
             "你是專業稅務報告撰寫者。請將提供的『草稿 Markdown』改寫為最終**結論報告**（Markdown）："
             "不得新增任何新數字；以下數字必須逐字保留；不得虛構事實；"
             "章節順序固定：摘要→重點數據→參數調整→約束→結論→合規備註；"
+            "在『結論』章節中，必須包含："
+            "（A）稅額計算流程：用數個要點描述從所得/稅基→扣除/抵減→應納稅額/淨稅額的計算路徑；僅使用草稿中已出現的欄位與數字。"
+            "（A-2）逐一拆解每個稅額怎麼算：凡草稿中出現『稅額/應納稅額/淨稅額/本期應納稅額/稅額合計/基準稅額/最佳化稅額/差額』等任何「稅額類數字」，都必須在結論中逐一說清楚其來源與計算式。"
+            "寫法要求：每個稅額都用『公式/加減乘除拆解』呈現（可用等式：A = B − C − D 或 A = (B × 稅率) − 抵減），並在等式中代入草稿已出現的數字；若草稿缺少足夠拆解資訊，至少要指出它是由哪些欄位/稅基/稅率/抵減推導，並明確說出「缺少哪些欄位或數字」所以無法展開到更細。"
+            "（B）參數調整原因：逐項解釋『參數調整』章節中每個變動如何影響稅額（扣除額限額、免稅額、稅率級距、股利課稅方式比較等）；可用具體機制表述，例如：薪資所得調整到可吃滿薪資特別扣除額上限、利息所得靠近儲蓄投資特別扣除額上限、股利在合併抵減與分開課稅間取較低者。避免臆測，沒有依據就不要硬說。"
+            "若本輪沒有任何參數變動，也要說明：計算流程、為何在現有約束下最佳解與基準相同，以及下一步如何擴大最佳化空間（例如放寬 free_vars 或加入結構性約束）。"
+            "禁止輸出句子：『本輪沒有可用的最佳化變數變動，因此無法提供調整建議。』"
             "語氣：顧問式、精準、簡潔。僅輸出 Markdown 本文。"
         )
         user = (
@@ -3947,6 +4069,8 @@ class ReasoningAgent(BaseAgent):
 
 
     async def handle(self, exec_output: Dict[str, Any]) -> Dict[str, Any]:
+        self._perf_reset()
+        self._perf_handle_t0 = time.perf_counter()
 
         def safe_json(obj: _Any, *, max_len: int = 800, max_keys: int = 50) -> str:
             """Best-effort JSON for debug with truncation."""
@@ -4232,7 +4356,8 @@ class ReasoningAgent(BaseAgent):
             self.memory.set("last_tool", tool_name)
             self.memory.set("last_exec_payload", {"tool_name": tool_name, "payload": payload})
             dbg("RETURN.no_solution")
-            return {"type": "final_feedback","text": "\n\n".join(md),"raw_result": result, "next_actions_hint": (
+            return {"type": "final_feedback","text": "\n\n".join(md),"perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
+            "raw_result": result, "next_actions_hint": (
                 "想變更條件？回覆「再加條件」可在現有基礎上加新限制；"
                 "回覆「重設條件」會清空所有條件並回到設定階段。"
                 "若要 **以此輪報告作為輸出報告**，請輸入「計算完成」。"
@@ -4290,7 +4415,7 @@ class ReasoningAgent(BaseAgent):
                 else:
                     msg.append("**無法擴量**：未放行任何變數，模型無法調整任何金額/數量。")
                 dbg("RETURN.maximize.no_free_vars")
-                return {"type": "final_feedback","text": "\n".join(msg),"raw_result": result}
+                return {"type": "final_feedback","text": "\n".join(msg),"perf_spans": self._perf_finalize_spans(), "raw_result": result}
 
             if isinstance(baseline, (int, float)) and isinstance(budget_val, (int, float)) and baseline > budget_val:
                 gap = float(baseline) - float(budget_val)
@@ -4304,7 +4429,8 @@ class ReasoningAgent(BaseAgent):
                     "- 先以「最小化稅額」模式估算在現有約束下的稅額下限；若下限仍高於上限，需提高上限或放寬條件。",
                 ]
                 dbg("RETURN.maximize.baseline_over_budget")
-                return {"type": "final_feedback","text": "\n".join(msg),"raw_result": result, "next_actions_hint": (
+                return {"type": "final_feedback","text": "\n".join(msg),"perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
+            "raw_result": result, "next_actions_hint": (
                     "想變更條件？回覆「再加條件」可在現有基礎上加新限制；"
                     "回覆「重設條件」會清空所有條件並回到設定階段。"
                     "若要 **以此輪報告作為輸出報告**，請輸入「計算完成」。"
@@ -4592,6 +4718,66 @@ class ReasoningAgent(BaseAgent):
             "compliance":    "#### 風險與合規備註\n- 本報告為模型推導之**估算**，實際稅負仍以主管機關規定與申報資料為準。\n- 涉及扣除認列、薪資結構等請務必依據法規與憑證（避免規避稅捐風險）。",
         }
 
+        
+        # ---- Dividend scheme comparison + per-scheme optimal solutions (tool-derived) ----
+        dividend_compare_md = ""
+        if tool_name == "income_tax" and isinstance(final_params, dict):
+            try:
+                def _v(k: str):
+                    meta = final_params.get(k)
+                    return meta.get("value") if isinstance(meta, dict) else meta
+
+                scheme = _v("dividend_scheme_best")
+                if scheme:
+                    _fm = self._fmt_money
+                    c_base = _v("tax_combined_progressive_with_dividend")
+                    c_credit = _v("tax_combined_dividend_credit_capped")
+                    c_net = _v("tax_combined_net")
+                    c_due = _v("tax_combined_tax_due")
+                    c_ref = _v("tax_combined_refund")
+
+                    s_non = _v("tax_separate_progressive_without_dividend")
+                    s_div = _v("tax_separate_dividend_tax_28")
+                    s_net = _v("tax_separate_net")
+
+                    dividend_compare_md = (
+                        "#### 股利課稅方式比較（合併 8.5% 抵減 vs 28% 分開）\n"
+                        f"- **最佳方案（本輪最佳解已用兩種方式比較後選較低者）**：{scheme}\n"
+                        f"- 合併計稅：稅額 {_fm(c_base)} − 抵減 {_fm(c_credit)} = 淨額 {_fm(c_net)}（應繳 {_fm(c_due)} / 退稅 {_fm(c_ref)}）\n"
+                        f"- 分開計稅：其他所得稅額 {_fm(s_non)} + 股利稅額 {_fm(s_div)} = 淨額 {_fm(s_net)}\n"
+                    )
+
+                    # If tool提供「兩種方式各自最佳化」候選解：把兩套最佳參數也列出來
+                    div_solutions = result.get("dividend_scheme_solutions") if isinstance(result, dict) else None
+                    if isinstance(div_solutions, dict):
+                        def _summ_solution(tag: str, node: dict) -> str:
+                            taxv = node.get("optimized")
+                            fp = node.get("final_params") or {}
+                            # 只列出 type=free 的欄位（通常就是你允許調整的變數）
+                            free_kv = []
+                            if isinstance(fp, dict):
+                                for kk, mm in fp.items():
+                                    if isinstance(mm, dict) and mm.get("type") == "free":
+                                        free_kv.append(f"{self._label(tool_name, kk)}={_fm(mm.get('value'))}")
+                            free_txt = ("；" + "，".join(free_kv)) if free_kv else ""
+                            return f"- {tag}：最佳稅額 {_fm(taxv)}{free_txt}"
+
+                        lines = ["\n#### 兩種股利方案各自最佳化（同一組前提/約束下）"]
+                        if "combined_only" in div_solutions:
+                            lines.append(_summ_solution("只看合併計稅 + 8.5% 抵減", div_solutions["combined_only"]))
+                        if "separate_only" in div_solutions:
+                            lines.append(_summ_solution("只看 28% 分開計稅", div_solutions["separate_only"]))
+                        dividend_compare_md = dividend_compare_md + "\n" + "\n".join(lines) + "\n"
+
+            except Exception as e:
+                dbg("dividend_compare.error", str(e))
+        if dividend_compare_md:
+            # Put it right after KPI section to make it visible in the UI.
+            if blocks.get("kpis"):
+                blocks["kpis"] = (blocks["kpis"].rstrip() + "\n\n" + dividend_compare_md).strip()
+            else:
+                blocks["kpis"] = dividend_compare_md.strip()
+
         sections = list(spec.get("sections", []))
         if "prev_diff" not in sections:
             try:
@@ -4729,6 +4915,7 @@ class ReasoningAgent(BaseAgent):
         return {
             "type": "final_feedback",
             "text": final_md,
+            "perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
             "raw_result": result,
             "next_actions_hint": "想變更條件？回覆「再加條件」可在現有基礎上加新限制；回覆「重設條件」會清空所有條件並回到設定階段。若要 **以此輪報告作為輸出報告**，請輸入「計算完成」。"
         }

@@ -8,7 +8,6 @@ from z3 import (
     Optimize,
     Int,
     Real,
-    RealVal,
     If,
     ToReal,
     ToInt,
@@ -65,7 +64,8 @@ DEFAULTS = {
 # --------------------------------------------------------------------------------------
 
 def _calculate_tax_internal(
-        *,
+            *,
+            objective: str = "best",
         # user data (partial list – full list same as original)
         is_married: bool = False,
         salary_self: int = 0,
@@ -145,7 +145,29 @@ def _calculate_tax_internal(
     net_taxable_income_z = Int("net_taxable_income_z")
     net_taxable_nonneg_z = Int("net_taxable_nonneg_z")
 
+    # --- Dividend taxation options (since 2018) ---
+    total_income_no_div_z = Int("total_income_no_div_z")
+    net_taxable_income_no_div_z = Int("net_taxable_income_no_div_z")
+    net_taxable_nonneg_no_div_z = Int("net_taxable_nonneg_no_div_z")
+
     rate_calc_r = Real("rate_calc_r")
+    rate_calc_no_div_r = Real("rate_calc_no_div_r")
+
+    progressive_tax_with_div_z = Int("progressive_tax_with_div_z")
+    progressive_tax_no_div_z = Int("progressive_tax_no_div_z")
+
+    dividend_credit_raw_z = Int("dividend_credit_raw_z")
+    dividend_credit_z = Int("dividend_credit_z")
+
+    combined_net_tax_z = Int("combined_net_tax_z")
+    combined_tax_due_z = Int("combined_tax_due_z")
+    combined_refund_z = Int("combined_refund_z")
+
+    dividend_tax_z = Int("dividend_tax_z")
+    separate_net_tax_z = Int("separate_net_tax_z")
+    separate_tax_due_z = Int("separate_tax_due_z")
+    separate_refund_z = Int("separate_refund_z")
+
     final_tax_z = Int("final_tax_z")
 
     # ----------------------------------------------------------------------------------
@@ -180,6 +202,18 @@ def _calculate_tax_internal(
             opt.add(z3_var == value)
             for cons in builtins:
                 opt.add(cons(z3_var))
+
+        # 未婚：配偶欄位必為 0
+        if not is_married:
+            opt.add(salary_spouse_z == 0)
+
+        # 若未提供扶養人數（under70+over70=0），強制所有扶養親屬相關=0
+        if int(cnt_under_70 or 0) + int(cnt_over_70 or 0) == 0:
+            # cnt 的 Z3 變數在 params 裡
+            opt.add(params["cnt_under_70"][0] == 0)
+            opt.add(params["cnt_over_70"][0] == 0)
+            # 扶養親屬所得直接設為0
+            opt.add(salary_dep_z == 0)
 
     apply_linear_constraints(opt, params, constraints, debug=False)
 
@@ -223,6 +257,16 @@ def _calculate_tax_internal(
             + other_income_z
     ))
 
+    # Dividend excluded income (for 28% separate taxation option)
+    opt.add(total_income_no_div_z == (
+            self_salary_after_ded_z
+            + spouse_salary_after_ded_z
+            + dep_salary_after_ded_z
+            + interest_z
+            + house_gain_z
+            + other_income_z
+    ))
+
     opt.add(total_exemption_z == (
             cnt_under_70_zv * c["personal_exemption_under70"]
             + cnt_over_70_zv * c["personal_exemption_over70"]
@@ -231,7 +275,9 @@ def _calculate_tax_internal(
     opt.add(chosen_deduction_z == If(use_itemized, itemized_ded_z, standard_deduction_z))
 
     interest_plus_div_z = Int("interest_plus_div_z")
-    opt.add(interest_plus_div_z == interest_z + stock_div_z)
+    # NOTE: Dividends are NOT eligible for the "savings & investment special deduction"
+    # (儲蓄投資特別扣除額) here; only interest is counted.
+    opt.add(interest_plus_div_z == interest_z)
     opt.add(
         savings_investment_deduction_z
         == If(
@@ -304,6 +350,10 @@ def _calculate_tax_internal(
     opt.add(net_taxable_income_z == total_income_z - total_deduction_z)
     opt.add(net_taxable_nonneg_z == If(net_taxable_income_z < 0, 0, net_taxable_income_z))
 
+    # Net taxable income excluding dividend (for 28% separate taxation option)
+    opt.add(net_taxable_income_no_div_z == total_income_no_div_z - total_deduction_z)
+    opt.add(net_taxable_nonneg_no_div_z == If(net_taxable_income_no_div_z < 0, 0, net_taxable_income_no_div_z))
+
     x = ToReal(net_taxable_nonneg_z)
     opt.add(
         rate_calc_r
@@ -325,8 +375,59 @@ def _calculate_tax_internal(
             ),
         )
     )
+    # Progressive tax (dividend included)
     safe_tax_r = If(rate_calc_r < 0, 0, rate_calc_r)
-    opt.add(final_tax_z == ToInt(safe_tax_r))
+    opt.add(progressive_tax_with_div_z == ToInt(safe_tax_r))
+
+    # Progressive tax (dividend excluded) for the 28% separate taxation option
+    x2 = ToReal(net_taxable_nonneg_no_div_z)
+    opt.add(
+        rate_calc_no_div_r
+        == If(
+            x2 <= c["bracket1_upper"],
+            (x2 * c["bracket1_rate"]) - c["bracket1_sub"],
+            If(
+                x2 <= c["bracket2_upper"],
+                (x2 * c["bracket2_rate"]) - c["bracket2_sub"],
+                If(
+                    x2 <= c["bracket3_upper"],
+                    (x2 * c["bracket3_rate"]) - c["bracket3_sub"],
+                    If(
+                        x2 <= c["bracket4_upper"],
+                        (x2 * c["bracket4_rate"]) - c["bracket4_sub"],
+                        (x2 * c["bracket5_rate"]) - c["bracket5_sub"],
+                    ),
+                ),
+            ),
+        )
+    )
+    safe_tax_no_div_r = If(rate_calc_no_div_r < 0, 0, rate_calc_no_div_r)
+    opt.add(progressive_tax_no_div_z == ToInt(safe_tax_no_div_r))
+
+    # ---------------- Dividend taxation options ----------------
+    # Option A: Include dividends in progressive tax, then apply dividend credit = min(dividend * 8.5%, 80,000)
+    opt.add(dividend_credit_raw_z == (stock_div_z * 85) / 1000)
+    opt.add(dividend_credit_z == If(dividend_credit_raw_z > 80_000, 80_000, dividend_credit_raw_z))
+
+    opt.add(combined_net_tax_z == progressive_tax_with_div_z - dividend_credit_z)
+    opt.add(combined_tax_due_z == If(combined_net_tax_z < 0, 0, combined_net_tax_z))
+    opt.add(combined_refund_z == If(combined_net_tax_z < 0, -combined_net_tax_z, 0))
+
+    # Option B: Exclude dividends from progressive tax, then tax dividends separately at 28%
+    opt.add(dividend_tax_z == (stock_div_z * 28) / 100)
+    opt.add(separate_net_tax_z == progressive_tax_no_div_z + dividend_tax_z)
+    opt.add(separate_tax_due_z == separate_net_tax_z)
+    opt.add(separate_refund_z == 0)
+
+    # Best scheme (lower net tax is better; negative means refund)
+    best_net_tax_z = If(combined_net_tax_z <= separate_net_tax_z, combined_net_tax_z, separate_net_tax_z)
+    # final_tax_z is the optimisation objective; choose which scheme to optimise.
+    if objective == "combined":
+        opt.add(final_tax_z == combined_net_tax_z)
+    elif objective == "separate":
+        opt.add(final_tax_z == separate_net_tax_z)
+    else:
+        opt.add(final_tax_z == best_net_tax_z)
 
     # ----------------------------------------------------------------------------------
     # 4. solve optimisation: minimise final_tax_z
@@ -357,16 +458,42 @@ def _calculate_tax_internal(
                 "difference": val - orig_value,
             }
 
+    # --- Add dividend scheme breakdown to outputs (derived) ---
+    _combined_net = model[combined_net_tax_z].as_long()
+    _separate_net = model[separate_net_tax_z].as_long()
+    # For scheme-specific optimisation, pin the reported scheme label to the objective.
+    if objective == "combined":
+        _best_scheme = "combined_8.5%_credit"
+    elif objective == "separate":
+        _best_scheme = "separate_28%"
+    else:
+        _best_scheme = "combined_8.5%_credit" if _combined_net <= _separate_net else "separate_28%"
+
+    final_params["dividend_scheme_best"] = {"value": _best_scheme, "type": "derived"}
+
+    final_params["tax_combined_progressive_with_dividend"] = {"value": model[progressive_tax_with_div_z].as_long(), "type": "derived"}
+    final_params["tax_combined_dividend_credit_raw"] = {"value": model[dividend_credit_raw_z].as_long(), "type": "derived"}
+    final_params["tax_combined_dividend_credit_capped"] = {"value": model[dividend_credit_z].as_long(), "type": "derived"}
+    final_params["tax_combined_net"] = {"value": _combined_net, "type": "derived"}
+    final_params["tax_combined_tax_due"] = {"value": model[combined_tax_due_z].as_long(), "type": "derived"}
+    final_params["tax_combined_refund"] = {"value": model[combined_refund_z].as_long(), "type": "derived"}
+
+    final_params["tax_separate_progressive_without_dividend"] = {"value": model[progressive_tax_no_div_z].as_long(), "type": "derived"}
+    final_params["tax_separate_dividend_tax_28"] = {"value": model[dividend_tax_z].as_long(), "type": "derived"}
+    final_params["tax_separate_net"] = {"value": _separate_net, "type": "derived"}
+    final_params["tax_separate_tax_due"] = {"value": model[separate_tax_due_z].as_long(), "type": "derived"}
+    final_params["tax_separate_refund"] = {"value": model[separate_refund_z].as_long(), "type": "derived"}
+
     net_taxable_income = model[net_taxable_income_z].as_long()
     return final_tax, net_taxable_income, final_params, differences
 
 
-def _run_with_high_income_rule(*, constraints: Optional[Dict[str, Dict[str, Any]]] = None, **kwargs):
+def _run_with_high_income_rule(*, constraints: Optional[Dict[str, Dict[str, Any]]] = None, objective: str = "best", **kwargs):
     """呼叫 _calculate_tax_internal，若淨課稅所得 ≥ 1,330,000 則強制長照 / 房租扣除為 0 後重算。"""
     constraints = constraints or {}
     free_vars = kwargs.get("free_vars") or []
 
-    tax1, net1, fp1, diff1 = _calculate_tax_internal(constraints=constraints, **kwargs)
+    tax1, net1, fp1, diff1 = _calculate_tax_internal(constraints=constraints, objective=objective, **kwargs)
     threshold = DEFAULTS["bracket2_upper"]
 
     if net1 is not None and net1 >= threshold:
@@ -378,7 +505,7 @@ def _run_with_high_income_rule(*, constraints: Optional[Dict[str, Dict[str, Any]
         new_free = [v for v in free_vars if v not in ("long_term_care_count", "rent_deduction")]
         kwargs2["free_vars"] = new_free if new_free else None
 
-        tax2, net2, fp2, diff2 = _calculate_tax_internal(constraints=constraints, **kwargs2)
+        tax2, net2, fp2, diff2 = _calculate_tax_internal(constraints=constraints, objective=objective, **kwargs2)
         return tax2, net2, fp2, diff2
 
     return tax1, net1, fp1, diff1
@@ -464,30 +591,117 @@ def calculate_comprehensive_income_tax(
     diff_out: Dict[str, Dict[str, Any]] = {}
     status = baseline_status
     opt_tax_solver_value: Optional[int] = None  # 除錯用
+    dividend_solutions = None  # 可選：兩種股利計稅方式各自最佳化的候選解
 
     # ---- 3) 若有 free_vars → manual_free 最佳化 -------------------------------
     if free_vars:
         mode = "manual_free"
         try:
-            # 3.1）第一次：帶 free_vars + constraints 做最佳化
-            opt_tax_solver_value, _, params_out, diff_out = _run_with_high_income_rule(
-                constraints=constraints,
-                **kwargs,
-            )
+            # 3.1）帶 free_vars + constraints 做最佳化
+            # 若含股利：分別在「合併(8.5%抵減)」與「分開(28%)」兩種方案下各自做一次最佳化，
+            # 取稅額較低者作為本輪「最佳解」(可避免 best=min() 造成的多解/不對齊)。
+            has_dividend = float(kwargs.get("stock_dividend", 0) or 0) > 0
+
+            comb_tax_solver = None
+            sep_tax_solver = None
+            comb_params = None
+            sep_params = None
+            comb_diff = None
+            sep_diff = None
+            chosen_objective = "best"
+
+            if has_dividend:
+                comb_tax_solver, _, comb_params, comb_diff = _run_with_high_income_rule(
+                    constraints=constraints, objective="combined", **kwargs
+                )
+                sep_tax_solver, _, sep_params, sep_diff = _run_with_high_income_rule(
+                    constraints=constraints, objective="separate", **kwargs
+                )
+
+                # 取較低者作為本輪最佳解（若相同，優先使用 separate 以符合直覺：最佳方案=separate 時參數也對齊）
+                if sep_tax_solver is None and comb_tax_solver is None:
+                    raise UnsatError("Optimization UNSAT for both dividend schemes.")
+                if comb_tax_solver is None:
+                    chosen_objective = "separate"
+                    opt_tax_solver_value, params_out, diff_out = sep_tax_solver, sep_params, (sep_diff or {})
+                elif sep_tax_solver is None:
+                    chosen_objective = "combined"
+                    opt_tax_solver_value, params_out, diff_out = comb_tax_solver, comb_params, (comb_diff or {})
+                else:
+                    if sep_tax_solver <= comb_tax_solver:
+                        chosen_objective = "separate"
+                        opt_tax_solver_value, params_out, diff_out = sep_tax_solver, sep_params, (sep_diff or {})
+                    else:
+                        chosen_objective = "combined"
+                        opt_tax_solver_value, params_out, diff_out = comb_tax_solver, comb_params, (comb_diff or {})
+            else:
+                opt_tax_solver_value, _, params_out, diff_out = _run_with_high_income_rule(
+                    constraints=constraints, objective="best", **kwargs
+                )
+
             status = "sat"
 
             # 3.2）用「最佳化出的最終參數」凍結重算一次（不帶 free_vars、不帶 constraints）
-            frozen_kwargs: Dict[str, Any] = {k: v["value"] for k, v in params_out.items()}
+            frozen_kwargs = {k: v["value"] for k, v in (params_out or {}).items() if k in _KNOWN_PARAM_NAMES}
             if "is_married" in kwargs:
                 frozen_kwargs["is_married"] = kwargs["is_married"]
             if "use_itemized" in kwargs:
                 frozen_kwargs["use_itemized"] = kwargs["use_itemized"]
 
-            tax_recalc, _, _, _ = _calculate_tax_internal(
+            # helper：用凍結重算的 derived 數值更新 params_out，但保留原本 free/fixed 標記
+            def _merge_params(p_solver, p_recalc):
+                p_solver = p_solver or {}
+                p_recalc = p_recalc or {}
+                out = {}
+                # solver 的 base 參數（保留 type），value 以 recalc 為準
+                for k, meta in p_solver.items():
+                    if not isinstance(meta, dict):
+                        continue
+                    if k in _KNOWN_PARAM_NAMES:
+                        v2 = p_recalc.get(k, {}).get("value", meta.get("value"))
+                        out[k] = {"value": v2, "type": meta.get("type", "fixed")}
+                # recalc 的 derived 欄位
+                for k, meta in p_recalc.items():
+                    if not isinstance(meta, dict):
+                        continue
+                    if k not in out:
+                        out[k] = {"value": meta.get("value"), "type": meta.get("type", "derived")}
+                return out
+
+            tax_recalc, _, fp_recalc, _ = _calculate_tax_internal(
                 constraints={},  # 凍結重算不帶任何 constraints
+                objective=chosen_objective,
                 **frozen_kwargs
             )
             opt_tax = tax_recalc
+            params_out = _merge_params(params_out, fp_recalc)
+
+            # 3.3）若含股利，給出「兩種股利計稅方式各自最佳化」的候選解（供前端比較）
+            dividend_solutions = None
+            try:
+                if has_dividend:
+                    def _scheme_pack(obj, tax_solver, p, d):
+                        if tax_solver is None:
+                            return None
+                        frozen = {k: v["value"] for k, v in (p or {}).items() if k in _KNOWN_PARAM_NAMES}
+                        if "is_married" in kwargs:
+                            frozen["is_married"] = kwargs["is_married"]
+                        if "use_itemized" in kwargs:
+                            frozen["use_itemized"] = kwargs["use_itemized"]
+                        tax_re, _, fp_re, _ = _calculate_tax_internal(constraints={}, objective=obj, **frozen)
+                        return {
+                            "optimized": tax_re,
+                            "optimized_solver": tax_solver,
+                            "diff": d or {},
+                            "final_params": _merge_params(p, fp_re),
+                        }
+
+                    dividend_solutions = {
+                        "combined_only": _scheme_pack("combined", comb_tax_solver, comb_params, comb_diff),
+                        "separate_only": _scheme_pack("separate", sep_tax_solver, sep_params, sep_diff),
+                    }
+            except Exception:
+                dividend_solutions = None
 
         except UnsatError:
             opt_tax = None
@@ -508,4 +722,5 @@ def calculate_comprehensive_income_tax(
         "diff": diff_out,
         "final_params": params_out,
         "constraints": constraints,
+        "dividend_scheme_solutions": dividend_solutions,
     }
