@@ -7,6 +7,37 @@ This repository contains the artifact for the ICSE 2026 SEIP paper:
 
 The artifact includes the full implementation of the agentic tax optimization system, together with the data and scripts needed to reproduce the main experimental results (RQ1, RQ2, and RQ3).
 
+> Language Note (Chinese-Only Artifact Interfaces)
+
+Important: This artifact is Chinese-first.
+
+The interactive system UI, example prompts, RQ1/RQ2/RQ3 task descriptions, and the LLM baseline prompts used in our experiments were written and executed in Traditional Chinese.
+
+All runtime interaction with the agentic service (both Gradio UI and the FastAPI /run endpoint) expects Chinese natural-language inputs for user queries (unless you directly call a calculator tool with structured parameters).
+
+What this means for artifact evaluators
+
+If you are not fluent in Chinese, you can still reproduce our experiments by translating the provided Chinese prompts/tasks into English (or your preferred language).
+However, translation is performed by the evaluator and is not included as part of this artifact, and translation choices may introduce minor semantic differences (e.g., tax terms, constraint wording, or intent strength such as “must” vs “should”).
+
+Recommended translation practice
+
+To reduce ambiguity and preserve reproducibility:
+
+Translate conservatively (literal over creative). Keep numbers, entity names, and constraint bounds unchanged.
+
+Do not paraphrase tax/legal terms unless necessary. If unsure, keep the Chinese term and add an English gloss, e.g.,
+“標準扣除額 (standard deduction)”, “薪資所得 (salary income)”.
+
+Keep an explicit record of translation:
+
+Save the translated prompt alongside the original Chinese prompt (e.g., task_07.zh.txt + task_07.en.txt).
+
+When reporting results, cite which version was used.
+
+Optional helper (out of scope for evaluation)
+
+Evaluators may use any translation tool (human or machine translation) to understand prompts and reports, but we do not require or provide a specific translation pipeline for badge evaluation. The artifact’s primary claim is that the system and baselines were evaluated under Chinese prompts, matching the original deployment context.
 ---
 
 ## Badges & Scope
