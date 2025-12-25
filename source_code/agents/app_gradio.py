@@ -146,34 +146,198 @@ def _perf_to_plain_dict(perf) -> dict:
     return {a: dict(ph) for a, ph in perf.items()}
 
 def _format_perf_breakdown(perf) -> str:
+    """本輪（turn）perf 統計：用 handle_total 當作 agent wall-clock，避免 nested spans 重複加總。"""
     if not perf:
         return ""
 
     rows = []
     for agent, phases in perf.items():
+        if not isinstance(phases, dict):
+            continue
         for phase, sec in phases.items():
-            rows.append((agent, phase, sec))
+            rows.append((agent, str(phase), float(sec)))
     rows.sort(key=lambda x: (-x[2], x[0], x[1]))
 
     totals = {}
-    for agent, _, sec in rows:
-        totals[agent] = totals.get(agent, 0.0) + sec
-    total_all = sum(totals.values())
+    # NOTE: phases like `llm:*` / `rag:*` are nested spans inside an agent call.
+    # For wall-clock turn time we only count the top-level `handle_total` per agent (if present).
+    for agent, phases in perf.items():
+        if isinstance(phases, dict) and "handle_total" in phases:
+            totals[agent] = float(phases.get("handle_total") or 0.0)
+        elif isinstance(phases, dict):
+            totals[agent] = float(sum(float(v) for v in phases.values()))
+        else:
+            totals[agent] = 0.0
+
+    # Hide agents that did not run in this turn (total ~ 0) to avoid confusing attribution.
+    totals = {a: t for a, t in totals.items() if float(t) > 1e-9}
+    keep_agents = set(totals.keys())
+    rows = [r for r in rows if r[0] in keep_agents]
+
+    total_all = float(sum(totals.values()))
 
     md = []
     md.append(f"\n\n**⏱️ 思考時間（本輪）≈ {total_all:.3f}s**")
     md.append("\n<details><summary>詳細耗時（點我展開）</summary>\n")
-    md.append("\n| Agent | Phase | Time (s) |")
-    md.append("|---|---|---:|")
+    md.append("\n| Agent | Phase | Time (s) | Meaning |")
+    md.append("|---|---|---:|---|")
     for agent, phase, sec in rows[:200]:
-        md.append(f"| {agent} | {phase} | {sec:.3f} |")
+        md.append(f"| {agent} | {phase} | {sec:.3f} | {_phase_explain(agent, phase)} |")
+
     md.append("\n**Agent 總計**")
     md.append("\n| Agent | Total (s) |")
     md.append("|---|---:|")
     for a, t in sorted(totals.items(), key=lambda kv: -kv[1]):
         md.append(f"| {a} | {t:.3f} |")
+
     md.append("\n</details>")
+    md.append(_format_perf_explain(perf))
     return "\n".join(md)
+
+def _phase_explain(agent: str, phase: str) -> str:
+    """
+    將 perf phase 轉成「這段時間在做什麼」的簡短說明（用於 debug / 論文 latency 解釋）。
+    """
+    p = (phase or "").strip()
+
+    # Top-level
+    if p == "handle_total":
+        return "此 Agent 本輪處理的整體 wall-clock（避免把 nested span 重複加總）"
+
+    # LLM spans
+    if p.startswith("llm:"):
+        name = p.split(":", 1)[1]
+        mapping = {
+            "caller_frame": "Caller：LLM 解析自然語言 → intent/slots（稅種判斷、欄位抽取）",
+            "caller_suggest": "Caller：LLM 生成追問/補欄位建議（缺哪些欄位、怎麼問）",
+            "constraint_suggest": "Constraint：LLM 產生條件式建議（可放寬/可最佳化方向）",
+            "constraint_parse": "Constraint：LLM 將自然語言條件轉成可求解的 constraint JSON",
+            "advice_json_basic": "Reasoning：LLM 依最佳化結果產生簡易建議（不引入新變數）",
+            "render_final_report": "Reasoning：LLM 改寫草稿為最終報告（更長、更慢）",
+            "render_once_with_llm": "Reasoning：LLM 將草稿精修為最終報告（單次；可能較慢）",
+        }
+        return mapping.get(name, f"LLM 呼叫：{name}")
+
+    # RAG spans
+    if p.startswith("rag:"):
+        name = p.split(":", 1)[1]
+        mapping = {
+            "build_queries": "RAG：依稅種/約束/變動欄位組出檢索 query",
+            "check_store": "RAG：檢查向量庫資料夾/collection 是否可用",
+            "init_vectorstore": "RAG：初始化 Chroma + Embeddings（可能含 IO/連線）",
+            "mmr_search": "RAG：MMR 檢索（多樣性搜尋；通常會做 embedding + 相似度計算）",
+            "similarity_search": "RAG：相似度檢索（with_score / fallback）",
+            "dedup": "RAG：去重與截斷 evidence chunks（避免重複內容）",
+            "compose_ctx": "RAG：把 deltas/constraints/evidence 組成給 LLM 的 ctx",
+        }
+        return mapping.get(name, f"RAG 步驟：{name}")
+
+
+    # Render / IO spans
+    if p.startswith("render:"):
+        name = p.split(":", 1)[1]
+        mapping = {
+            "external_renderer": "渲染：外部 renderer 產生報告版型（可能含額外格式化）",
+        }
+        return mapping.get(name, f"渲染步驟：{name}")
+
+    if p.startswith("io:"):
+        name = p.split(":", 1)[1]
+        mapping = {
+            "persist_report_files": "IO：將報告寫入檔案（md/json）",
+        }
+        return mapping.get(name, f"IO：{name}")
+
+    # Tool calls
+    if p.startswith("tool_call_total:"):
+        tool = p.split(":", 1)[1]
+        return f"工具執行：{tool}（例如 SMT/最佳化求解）"
+
+    # Fallback
+    return ""
+
+def _agent_total_from_phases(phases: dict) -> float:
+    """Turn 的 wall-clock：優先用 handle_total（避免 nested span 重複加總）"""
+    if not isinstance(phases, dict):
+        return 0.0
+    if "handle_total" in phases:
+        return float(phases.get("handle_total") or 0.0)
+    return float(sum(float(v) for v in phases.values()))
+
+def _format_session_perf(executor, session_key: str, current_turn_perf=None) -> str:
+    """聚合 executor.memory['perf_trace']，印出本 session（整題）累積時間。"""
+    try:
+        hist = executor.memory.get("perf_trace") or []
+        if not isinstance(hist, list) or not hist:
+            return ""
+
+        agg = {}
+        n = 0
+        for item in hist:
+            if not isinstance(item, dict):
+                continue
+            if item.get("session") != session_key:
+                continue
+            perf = item.get("perf") or {}
+            if not isinstance(perf, dict):
+                continue
+            n += 1
+            for agent, phases in perf.items():
+                agg[agent] = agg.get(agent, 0.0) + _agent_total_from_phases(phases)
+
+        # include current turn (so the session total shown in UI matches "as of this response")
+        if isinstance(current_turn_perf, dict) and current_turn_perf:
+            n += 1
+            for agent, phases in current_turn_perf.items():
+                agg[agent] = agg.get(agent, 0.0) + _agent_total_from_phases(phases)
+
+        if n == 0:
+            return ""
+
+        rows = sorted(agg.items(), key=lambda kv: -kv[1])
+        total = float(sum(agg.values()))
+
+        md = []
+        md.append(f"\n\n<details><summary>📌 本題累積耗時（跨 {n} 輪）≈ {total:.3f}s</summary>\n")
+        md.append("\n| Agent | Total (s) |")
+        md.append("|---|---:|")
+        for a, t in rows:
+            md.append(f"| {a} | {t:.3f} |")
+        md.append("\n</details>")
+        return "\n".join(md)
+    except Exception:
+        return ""
+
+def _format_perf_explain(perf) -> str:
+    """列出本輪出現過的 phase 的中文說明（方便 debug / paper）。"""
+    try:
+        if not perf or not isinstance(perf, dict):
+            return ""
+        uniq = []
+        seen = set()
+        for agent, phases in perf.items():
+            if not isinstance(phases, dict):
+                continue
+            for phase in phases.keys():
+                key = (agent, str(phase))
+                if key in seen:
+                    continue
+                seen.add(key)
+                uniq.append((agent, str(phase), _phase_explain(agent, str(phase))))
+
+        if not uniq:
+            return ""
+
+        md = []
+        md.append("\n\n<details><summary>🧩 耗時細項說明（本輪出現的 phase 都在做什麼）</summary>\n")
+        md.append("\n| Agent | Phase | 說明 |")
+        md.append("|---|---|---|")
+        for a, p, e in uniq[:200]:
+            md.append(f"| {a} | {p} | {e or ''} |")
+        md.append("\n</details>")
+        return "\n".join(md)
+    except Exception:
+        return ""
 
 def _persist_perf_snapshot(executor, session_key: str, turn_perf, meta: dict | None = None):
     """將本輪 perf trace 存入 executor.memory['perf_trace']（最多 50 筆），方便回溯/匯出。"""
@@ -416,7 +580,8 @@ async def chat_logic(
     user_msg: str,
     history,
     show_debug: bool = False,
-    auto_reset: bool = True
+    auto_reset: bool = True,
+    report_fast: bool = False,
 ):
     session_key = _get_or_create_session_key(history)
     bundle = _get_session_bundle(session_key)
@@ -424,6 +589,12 @@ async def chat_logic(
     constraint = bundle["constraint"]
     executor = bundle["executor"]
     reasoner = bundle["reasoner"]
+
+    # Report mode (full vs fast) stored in session memory for ReasoningAgent & CallerAgent early tips.
+    try:
+        bundle["memory"].set("report_mode", "fast" if report_fast else "full")
+    except Exception:
+        pass
 
     turn_perf = _perf_new()
 
@@ -491,11 +662,28 @@ async def chat_logic(
         ask = await constraint.handle({"type": "reopen_constraints"})
         _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
+
+        # Merge nested spans from ConstraintAgent (e.g., llm:constraint_parse) into this turn's perf
+        try:
+            spans = constraint.memory.get("perf_spans_last:ConstraintAgent")
+            if isinstance(spans, list):
+                for it in spans:
+                    if isinstance(it, (list, tuple)) and len(it) == 2:
+                        ph, sec = it
+                    elif isinstance(it, dict):
+                        ph, sec = it.get("phase"), it.get("time")
+                    else:
+                        continue
+                    if str(ph) == "handle_total":
+                        continue
+                    _perf_add(turn_perf, "ConstraintAgent", str(ph), float(sec))
+        except Exception:
+            pass
         cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
         q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
         debug_block = _dump_debug_and_clear(caller) if show_debug else ""
 
-        msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
+        msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
         _persist_perf_snapshot(executor, sess_key, turn_perf, meta={"type": "reset_constraints_reopen"})
         return _attach_session_tag(msg, sess_key)
 
@@ -537,7 +725,7 @@ async def chat_logic(
             f"✅ 最終**結論報告**已自動儲存：\n"
             f"- {base}/last.md\n- {base}/last.json\n\n"
             f"（每次「計算完成」都會覆寫為最新），已送出報告：{sent_title}"
-            + _format_perf_breakdown(turn_perf)
+            + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
         )
         _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "finish"})
         return _attach_session_tag(msg, session_key)
@@ -555,6 +743,23 @@ async def chat_logic(
             parsed = await constraint.handle({"type": "constraints_reply", "text": user_msg})
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
+
+            # Merge nested spans from ConstraintAgent (e.g., llm:constraint_parse) into this turn's perf
+            try:
+                spans = constraint.memory.get("perf_spans_last:ConstraintAgent")
+                if isinstance(spans, list):
+                    for it in spans:
+                        if isinstance(it, (list, tuple)) and len(it) == 2:
+                            ph, sec = it
+                        elif isinstance(it, dict):
+                            ph, sec = it.get("phase"), it.get("time")
+                        else:
+                            continue
+                        if str(ph) == "handle_total":
+                            continue
+                        _perf_add(turn_perf, "ConstraintAgent", str(ph), float(sec))
+            except Exception:
+                pass
             cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", parsed.get("debug") or [])
 
             if parsed.get("type") == "reset_constraints":
@@ -593,13 +798,17 @@ async def chat_logic(
                 try:
                     spans = fb.get("perf_spans") if isinstance(fb, dict) else None
                     if not spans:
-                        spans = reasoner.memory.get("perf_spans_last")
+                        spans = reasoner.memory.get("perf_spans_last:ReasoningAgent")
                     if isinstance(spans, list):
                         for item in spans:
                             if isinstance(item, (list, tuple)) and len(item) == 2:
-                                _perf_add(turn_perf, "ReasoningAgent", str(item[0]), float(item[1]))
+                                name = str(item[0])
+                                if name != "handle_total":
+                                    _perf_add(turn_perf, "ReasoningAgent", name, float(item[1]))
                             elif isinstance(item, dict) and "name" in item and "sec" in item:
-                                _perf_add(turn_perf, "ReasoningAgent", str(item["name"]), float(item["sec"]))
+                                name = str(item["name"])
+                                if name != "handle_total":
+                                    _perf_add(turn_perf, "ReasoningAgent", name, float(item["sec"]))
                 except Exception:
                     pass
 
@@ -642,7 +851,7 @@ async def chat_logic(
                     + debug_details
                     + (cons_dbg_html if show_debug else "")
                     + debug_block
-                    + _format_perf_breakdown(turn_perf)
+                    + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
                 )
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "execute_via_constraint_reply"})
                 bundle["awaiting_user"] = None
@@ -654,7 +863,7 @@ async def chat_logic(
             if parsed.get("type") == "follow_up":
                 q = _strip_condition_tuning_tips(parsed.get("question") or "（沒有問題文字）")
                 debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-                msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
+                msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_follow_up"})
                 return _attach_session_tag(msg, session_key)
 
@@ -665,7 +874,7 @@ async def chat_logic(
                 + "\n```"
                 + (cons_dbg_html if show_debug else "")
                 + debug_block
-                + _format_perf_breakdown(turn_perf)
+                + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             )
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_unknown"})
             return _attach_session_tag(msg, session_key)
@@ -675,15 +884,49 @@ async def chat_logic(
         result = await caller.handle(user_msg)
         _perf_add(turn_perf, "CallerAgent", "handle_total", time.perf_counter() - t0)
 
+
+        # Merge nested spans from CallerAgent (e.g., llm:caller_frame) into this turn's perf
+        try:
+            spans = caller.memory.get("perf_spans_last:CallerAgent")
+            if isinstance(spans, list):
+                for it in spans:
+                    if isinstance(it, (list, tuple)) and len(it) == 2:
+                        ph, sec = it
+                    elif isinstance(it, dict):
+                        ph, sec = it.get("phase"), it.get("time")
+                    else:
+                        continue
+                    if str(ph) == "handle_total":
+                        continue
+                    _perf_add(turn_perf, "CallerAgent", str(ph), float(sec))
+        except Exception:
+            pass
         if isinstance(result, dict) and result.get("type") == "reopen_constraints":
             t0 = time.perf_counter()
             ask = await constraint.handle({"type": "reopen_constraints"})
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
+
+            # Merge nested spans from ConstraintAgent (e.g., llm:constraint_parse) into this turn's perf
+            try:
+                spans = constraint.memory.get("perf_spans_last:ConstraintAgent")
+                if isinstance(spans, list):
+                    for it in spans:
+                        if isinstance(it, (list, tuple)) and len(it) == 2:
+                            ph, sec = it
+                        elif isinstance(it, dict):
+                            ph, sec = it.get("phase"), it.get("time")
+                        else:
+                            continue
+                        if str(ph) == "handle_total":
+                            continue
+                        _perf_add(turn_perf, "ConstraintAgent", str(ph), float(sec))
+            except Exception:
+                pass
             cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
             q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-            msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
+            msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "reopen_constraints"})
             return _attach_session_tag(msg, session_key)
 
@@ -692,12 +935,12 @@ async def chat_logic(
 
         if result is None:
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-            msg = "⚠️ 系統回傳空結果（None）。" + debug_block + _format_perf_breakdown(turn_perf)
+            msg = "⚠️ 系統回傳空結果（None）。" + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "caller_none"})
             return _attach_session_tag(msg, session_key)
         if not isinstance(result, dict):
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-            msg = f"⚠️ 非預期回傳型別：{type(result).__name__}\n{result!r}" + debug_block + _format_perf_breakdown(turn_perf)
+            msg = f"⚠️ 非預期回傳型別：{type(result).__name__}\n{result!r}" + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "caller_bad_type"})
             return _attach_session_tag(msg, session_key)
 
@@ -719,7 +962,7 @@ async def chat_logic(
                     pass
 
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-            msg2 = msg + debug_block + _format_perf_breakdown(turn_perf)
+            msg2 = msg + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "caller_follow_up"})
             return _attach_session_tag(msg2, session_key)
 
@@ -730,13 +973,30 @@ async def chat_logic(
             ask = await constraint.handle(result)
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
+
+            # Merge nested spans from ConstraintAgent (e.g., llm:constraint_parse) into this turn's perf
+            try:
+                spans = constraint.memory.get("perf_spans_last:ConstraintAgent")
+                if isinstance(spans, list):
+                    for it in spans:
+                        if isinstance(it, (list, tuple)) and len(it) == 2:
+                            ph, sec = it
+                        elif isinstance(it, dict):
+                            ph, sec = it.get("phase"), it.get("time")
+                        else:
+                            continue
+                        if str(ph) == "handle_total":
+                            continue
+                        _perf_add(turn_perf, "ConstraintAgent", str(ph), float(sec))
+            except Exception:
+                pass
             payload_fmt = json.dumps(payload, ensure_ascii=False, indent=2)
             cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
 
             if ask.get("type") == "follow_up":
                 q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
                 debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-                msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
+                msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_follow_up_after_tool_request"})
                 return _attach_session_tag(msg, session_key)
 
@@ -772,7 +1032,7 @@ async def chat_logic(
                 try:
                     spans = fb.get("perf_spans") if isinstance(fb, dict) else None
                     if not spans:
-                        spans = reasoner.memory.get("perf_spans_last")
+                        spans = reasoner.memory.get("perf_spans_last:ReasoningAgent")
                     if isinstance(spans, list):
                         for item in spans:
                             if isinstance(item, (list, tuple)) and len(item) == 2:
@@ -817,7 +1077,7 @@ async def chat_logic(
                     + _ui_footer_tip()
                     + debug_details
                     + (cons_dbg_html if show_debug else "")
-                    + _format_perf_breakdown(turn_perf)
+                    + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
                 )
                 debug_block = _dump_debug_and_clear(caller) if show_debug else ""
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "execute_via_tool_request"})
@@ -834,20 +1094,20 @@ async def chat_logic(
                 + "\n```"
                 + (cons_dbg_html if show_debug else "")
                 + debug_block
-                + _format_perf_breakdown(turn_perf)
+                + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
             )
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_unknown_after_tool_request"})
             return _attach_session_tag(msg, session_key)
 
         debug_block = _dump_debug_and_clear(caller) if show_debug else ""
-        msg = "⚠️ 未知 CallerAgent 回覆：\n```json\n" + json.dumps(result, ensure_ascii=False, indent=2) + "\n```" + debug_block + _format_perf_breakdown(turn_perf)
+        msg = "⚠️ 未知 CallerAgent 回覆：\n```json\n" + json.dumps(result, ensure_ascii=False, indent=2) + "\n```" + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
         _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "caller_unknown"})
         return _attach_session_tag(msg, session_key)
 
     except Exception as exc:
         debug_block = _dump_debug_and_clear(caller) if show_debug else ""
         tb = traceback.format_exc()
-        msg = f"⚠️ 系統錯誤：{exc}\n\n```\n{tb}\n```" + debug_block + _format_perf_breakdown(turn_perf)
+        msg = f"⚠️ 系統錯誤：{exc}\n\n```\n{tb}\n```" + debug_block + _format_perf_breakdown(turn_perf) + _format_session_perf(executor, session_key, turn_perf)
         _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "exception", "error": str(exc)})
         return _attach_session_tag(msg, session_key)
 
@@ -903,6 +1163,7 @@ with gr.Blocks(
                 with gr.Row():
                     show_debug = gr.Checkbox(value=False, label="顯示 DEBUG 區塊")
                     auto_reset = gr.Checkbox(value=True, label="每輪結束自動軟重置（保留續接）")
+                report_fast = gr.Checkbox(value=False, label="快速報告（略過 RAG / early_tips / 縮短建議）")
 
             with gr.Group(elem_classes=["glass-card"]):
                 gr.Markdown("**🧭 請選擇以下稅種 **（點一下自動填入）")
@@ -979,16 +1240,16 @@ with gr.Blocks(
         bundle["awaiting_user"] = {"t0": time.perf_counter(), "agent": "CallerAgent", "phase": "user_wait"}
         return new_history, ""
 
-    async def on_submit(user_text, history, show_dbg, auto_rst):
-        bot_text = await chat_logic(user_text, history, show_dbg, auto_rst)
+    async def on_submit(user_text, history, show_dbg, auto_rst, report_fast_flag):
+        bot_text = await chat_logic(user_text, history, show_dbg, auto_rst, report_fast_flag)
         new_history = (history or []) + [
             {"role": "user", "content": user_text},
             {"role": "assistant", "content": bot_text},
         ]
         return new_history, ""
 
-    send.click(on_submit, inputs=[msg, chatbot, show_debug, auto_reset], outputs=[chatbot, msg])
-    msg.submit(on_submit, inputs=[msg, chatbot, show_debug, auto_reset], outputs=[chatbot, msg])
+    send.click(on_submit, inputs=[msg, chatbot, show_debug, auto_reset, report_fast], outputs=[chatbot, msg])
+    msg.submit(on_submit, inputs=[msg, chatbot, show_debug, auto_reset, report_fast], outputs=[chatbot, msg])
 
     def _attach_quick_pick(btn: gr.Button, tool_name: str):
         # 直接切到該稅種的『階段一』，不走 LLM 判斷，也不需要先送出訊息

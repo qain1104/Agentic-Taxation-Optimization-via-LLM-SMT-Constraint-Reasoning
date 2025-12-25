@@ -595,8 +595,51 @@ class BaseAgent:
     def __post_init__(self):
         if not self.name:
             self.name = self.__class__.__name__
+    # ===== Perf tracing (BaseAgent) =====
+    def _perf_reset(self) -> None:
+        """Reset nested spans for a new handle() call (avoid cross-turn accumulation)."""
+        try:
+            self._perf_spans = []
+            self._perf_spans_last = []
+            try:
+                self.memory.set(f"perf_spans_last:{self.name}", [])
+            except Exception:
+                pass
+        except Exception:
+            pass
 
-    async def _chat(self, system_prompt: str, user_prompt: str, *, temperature: float = 0.0) -> str:
+    def _perf_add(self, phase: str, dt: float) -> None:
+        """Append a nested span (e.g., llm:* / rag:*). Not wall-clock; used for breakdown."""
+        try:
+            if not hasattr(self, "_perf_spans") or self._perf_spans is None:
+                self._perf_spans = []
+            self._perf_spans.append((str(phase), float(dt)))
+            self._perf_spans_last = list(self._perf_spans)
+            # Namespaced to avoid collision because all agents share the same MemoryStore.
+            try:
+                self.memory.set(f"perf_spans_last:{self.name}", self._perf_spans_last)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _perf_span(self, phase: str):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._perf_add(phase, time.perf_counter() - t0)
+
+    async def _chat_traced(self, phase: str, sys_prompt: str, user_msg: str, **kwargs) -> str:
+        """LLM call wrapped with a perf span named llm:{phase}."""
+        with self._perf_span(f"llm:{phase}"):
+            return await self._chat(sys_prompt, user_msg, **kwargs)
+
+    async def _chat(
+self, system_prompt: str, user_prompt: str, *, temperature: float = 0.0) -> str:
         """LLM wrapper using AsyncOpenAI client."""
         messages = [
             {"role": "system", "content": system_prompt},
@@ -978,7 +1021,8 @@ class CallerAgent(BaseAgent):
 
         db = getattr(self, "_rag_db", None)
         if db is None:
-            db = _load_rag()
+            with self._perf_span('rag:early_init_vectorstore'):
+                db = _load_rag()
             setattr(self, "_rag_db", db)
 
         def _mk_query() -> str:
@@ -991,7 +1035,8 @@ class CallerAgent(BaseAgent):
         if db:
             try:
                 q = _mk_query()
-                hits = db.similarity_search(q, k=6)
+                with self._perf_span('rag:early_similarity_search'):
+                    hits = db.similarity_search(q, k=6)
                 for h in (hits or []):
                     page = (h.metadata or {}).get("page") or (h.metadata or {}).get("loc")
                     title = (h.metadata or {}).get("title") or (h.metadata or {}).get("source") or "手冊"
@@ -1038,7 +1083,7 @@ class CallerAgent(BaseAgent):
              + ("\n".join(policy_lines) if policy_lines else "")
         )
         user_prompt = json.dumps(context, ensure_ascii=False)
-        raw = await self._chat(sys_prompt, user_prompt, temperature=0.2)
+        raw = await self._chat_traced('early_tips', sys_prompt, user_prompt, temperature=0.2)
 
         try:
             obj = json.loads(raw) if isinstance(raw, str) else {}
@@ -1168,7 +1213,7 @@ class CallerAgent(BaseAgent):
             "{ \"intent\": <intent>, \"slots\": {<field>: <value or null>} }\n"
             "僅輸出上述單一 JSON 物件，禁止多餘說明。"
         )
-        raw = await self._chat(sys_prompt, user_msg)
+        raw = await self._chat_traced('caller_frame', sys_prompt, user_msg)
 
         try:
             frame = json.loads(raw)
@@ -1207,6 +1252,7 @@ class CallerAgent(BaseAgent):
 
     # === 核心：處理一個使用者輸入 ===
     async def handle(self, user_msg: str) -> Dict[str, Any]:
+        self._perf_reset()
         def _is_next_local(s: str) -> bool:
             return bool(re.search(r"^(?:下一步|next|go|繼續|ok)$", (s or "").strip(), flags=re.I))
         
@@ -1479,7 +1525,19 @@ class CallerAgent(BaseAgent):
         self.memory.set("op", op)
 
 
-        early_md = await self._early_condition_tips(tool_name, merged_slots, op, user_msg)
+        # Early tips (optional): can be expensive due to RAG + LLM.
+        # In fast/template modes, skip to reduce latency.
+        report_mode = (
+            self.memory.get("report_mode")
+            or os.getenv("TAX_REPORT_MODE", "full")
+        )
+        report_mode = str(report_mode or "full").strip().lower()
+        early_md = ""
+        if report_mode in {"full"}:
+            early_md = await self._early_condition_tips(tool_name, merged_slots, op, user_msg)
+        else:
+            # fast/template: skip early tips by default
+            early_md = ""
         if early_md:
             request_payload["early_tips_md"] = early_md
 
@@ -1901,7 +1959,7 @@ class ConstraintAgent(BaseAgent):
         # 先跑 LLM 取得 3 條建議；失敗則回退到啟發式。
         tips: List[str] = []
         try:
-            raw = await self._chat(sys_prompt, user_prompt, temperature=0.2)
+            raw = await self._chat_traced('caller_suggest', sys_prompt, user_prompt, temperature=0.2)
             obj = _json.loads(raw) if isinstance(raw, str) else {}
             arr = obj.get("tips")
             if isinstance(arr, list):
@@ -2475,7 +2533,7 @@ class ConstraintAgent(BaseAgent):
             + "\n\n請將下列敘述轉為 JSON（只輸出 JSON）：\n" + str(user_text)
         )
 
-        raw = await self._chat(sys_prompt, user_prompt, temperature=0.0)
+        raw = await self._chat_traced('constraint_parse', sys_prompt, user_prompt, temperature=0.0)
         _append_debug(self.memory, "[ConstraintAgent] LLM constraints RAW:", raw)
 
         obj = self._json_loads_with_merge(raw) or {}
@@ -2912,6 +2970,7 @@ class ConstraintAgent(BaseAgent):
         return {"type": "follow_up", "stage": "constraints", "question": question, "tool_name": tool}
 
     async def handle(self, obj: Dict[str, Any]) -> Dict[str, Any]:
+        self._perf_reset()
         stage = obj.get("type")
 
         # —— -1) 若在條件回覆階段也輸入了匯出命令，直接上傳 —— 
@@ -3360,7 +3419,7 @@ class ReasoningAgent(BaseAgent):
                     spans.append(("handle_total", float(time.perf_counter() - t0)))
             out = list(spans) if isinstance(spans, list) else []
             try:
-                self.memory.set("perf_spans_last", out)
+                self.memory.set(f"perf_spans_last:{getattr(self, 'name', self.__class__.__name__)}", out)
             except Exception:
                 pass
             return out
@@ -3797,7 +3856,9 @@ class ReasoningAgent(BaseAgent):
             return []
 
     async def _rag_advice_from_result(self, tool_name: str, result: dict, payload: dict, field_labels: dict):
+        """RAG 版建議：用向量庫抓稅務手冊片段，讓建議可引用手冊文字（較慢）。"""
         import os, json
+
         baseline = result.get("baseline")
         optimized = result.get("optimized") or result.get("tax") or result.get("optimized_tax")
         mode = (result.get("mode") or payload.get("op") or "").lower()
@@ -3806,33 +3867,40 @@ class ReasoningAgent(BaseAgent):
         final_params = result.get("final_params") or {}
         labels = field_labels or {}
 
-        main_q = self._mk_rag_query_from_ctx(
-            tool_name=tool_name,
-            mode=mode,
-            budget=(payload.get("user_params") or {}).get(TOOL_MAP.get(tool_name, {}).get("budget_field")) or self._first_hit(result, self.SPEC_DEFAULT["paths"]["budget"]),
-            constraints=constraints,
-            diff=diff,
-            input_params=(payload.get("user_params") or {}),
-            final_params=final_params,
-        )
-        queries = [
-            main_q,
-            f"{main_q} 憑證 認列 限額",
-            f"{main_q} 免稅 扣除 比例 上限",
-        ]
+        # 1) build queries
+        with self._perf_span("rag:build_queries"):
+            main_q = self._mk_rag_query_from_ctx(
+                tool_name=tool_name,
+                mode=mode,
+                budget=(payload.get("user_params") or {}).get(TOOL_MAP.get(tool_name, {}).get("budget_field"))
+                       or self._first_hit(result, self.SPEC_DEFAULT["paths"]["budget"]),
+                constraints=constraints,
+                diff=diff,
+                input_params=(payload.get("user_params") or {}),
+                final_params=final_params,
+            )
+            queries = [
+                main_q,
+                f"{main_q} 憑證 認列 限額",
+                f"{main_q} 免稅 扣除 比例 上限",
+            ]
 
         persist_dir = os.getenv("RAG_CHROMA_DIR", "rag/chroma")
         collection  = os.getenv("RAG_COLLECTION", "tax_handbook")
-        if not os.path.isdir(persist_dir):
-            no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
-            return (no_rag[:5], [])
 
+        with self._perf_span("rag:check_store"):
+            if not os.path.isdir(persist_dir):
+                no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
+                return (no_rag[:5], [])
+
+        # 2) init vectorstore (can be slow if embeddings init / IO)
         try:
-            db = Chroma(
-                collection_name=collection,
-                persist_directory=persist_dir,
-                embedding_function=OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small"))
-            )
+            with self._perf_span("rag:init_vectorstore"):
+                db = Chroma(
+                    collection_name=collection,
+                    persist_directory=persist_dir,
+                    embedding_function=OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small"))
+                )
         except Exception:
             no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
             return (no_rag[:5], [])
@@ -3852,8 +3920,8 @@ class ReasoningAgent(BaseAgent):
             sources.append({"title": str(title), "page": page, "url": url, "chunk": txt})
             chunks.append(txt)
 
-        try:
-            t_mmr0 = time.perf_counter()
+        # 3) mmr search (diverse)
+        with self._perf_span("rag:mmr_search"):
             for q in queries:
                 try:
                     mmr_hits = db.max_marginal_relevance_search(q, k=k, fetch_k=k*3)
@@ -3862,10 +3930,12 @@ class ReasoningAgent(BaseAgent):
                 except Exception:
                     pass
 
+        # 4) similarity search (with score + fallback)
+        with self._perf_span("rag:similarity_search"):
             for q in queries:
                 try:
                     scored = db.similarity_search_with_score(q, k=k)
-                    scores = [float(s) for _, s in scored if isinstance(s,(int,float))]
+                    scores = [float(s) for _, s in scored if isinstance(s, (int, float))]
                     thresh = min_score_default
                     if scores and min(scores) < 0.05:
                         thresh = 0.0
@@ -3882,8 +3952,8 @@ class ReasoningAgent(BaseAgent):
                     except Exception:
                         pass
 
-            self._perf_add('rag:similarity_total', time.perf_counter() - t_sim0)
-
+        # 5) dedup / cut evidence
+        with self._perf_span("rag:dedup"):
             uniq = []
             seen = set()
             for src in sources:
@@ -3894,15 +3964,17 @@ class ReasoningAgent(BaseAgent):
             sources = uniq[:8]
             chunks = [s["chunk"] for s in sources]
 
-        except Exception:
-            sources, chunks = [], []
+        if not chunks:
+            no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
+            return (no_rag[:5], [])
 
-        if chunks:
+        # 6) compose ctx for LLM
+        with self._perf_span("rag:compose_ctx"):
             diffs = result.get("diff") or {}
             final_params = result.get("final_params") or {}
             deltas = []
             if isinstance(diffs, dict):
-                for k, meta in diffs.items():
+                for kk, meta in diffs.items():
                     if not isinstance(meta, dict):
                         continue
                     orig = meta.get("original")
@@ -3911,12 +3983,13 @@ class ReasoningAgent(BaseAgent):
                     if not isinstance(orig, (int, float)) or not isinstance(optv, (int, float)):
                         continue
                     deltas.append({
-                        "key": k,
-                        "label": labels.get(k, k),
+                        "key": kk,
+                        "label": labels.get(kk, kk),
                         "original": orig,
                         "optimized": optv,
                         "delta": delta if isinstance(delta, (int, float)) else (optv - orig),
                     })
+
             ctx = {
                 "tool_name": tool_name,
                 "mode": mode,
@@ -3936,23 +4009,24 @@ class ReasoningAgent(BaseAgent):
                 "2) 每一條建議都必須附上『背後原因』：需明確指出利用的稅務機制，及該建議所須繳納的稅額，還有他怎麼算出來的。\n"
                 "3) 不要用『若有…』『可能…』臆測使用者狀況；只描述『本輪最佳化是怎麼改、為何會降稅』。\n"
                 "4) 輸出中文，每條建議一行\n"
-                "5) 若 deltas 為空：仍要輸出少量 advice（禁止輸出「本輪沒有可用的最佳化變數變動，因此無法提供調整建議。」）。\n"
+                "5) 若 deltas 為空：仍要輸出少量 advice（禁止輸出『本輪沒有可用的最佳化變數變動，因此無法提供調整建議。』）。\n"
                 "   - 先說明本輪『最佳解與基準相同／在現有約束下無更優解』。\n"
-                "   - 再用幾個要點簡述本稅種的『稅額計算流程』，並給出可擴大最佳化空間的下一步（例如放寬 free_vars/加入結構性約束）。\n"
-                "輸出必須是嚴格 JSON：{\"advice\":[\"...\"]}，不要輸出多餘文字。"
+                "   - 再用幾個要點簡述本稅種的『稅額計算流程』，並給出可擴大最佳化空間的下一步。\n"
+                "輸出必須是嚴格 JSON：{\"advice\":[\"...\" ]}，不要輸出多餘文字。"
             )
             user = json.dumps(ctx, ensure_ascii=False)
 
-            txt = await self._chat_traced('advice_json_basic', sys, user, temperature=0.2)
-            try:
-                obj = json.loads(txt) if isinstance(txt, str) else {}
-                adv = obj.get("advice")
-                if isinstance(adv, list):
-                    adv = [str(a).strip() for a in adv if str(a).strip()]
-                    if adv:
-                        return (adv[:5], sources)
-            except Exception:
-                pass
+        # 7) LLM advice (already traced as llm:advice_json_basic)
+        txt = await self._chat_traced('advice_json_basic', sys, user, temperature=0.2)
+        try:
+            obj = json.loads(txt) if isinstance(txt, str) else {}
+            adv = obj.get("advice")
+            if isinstance(adv, list):
+                adv = [str(a).strip() for a in adv if str(a).strip()]
+                if adv:
+                    return (adv[:5], sources)
+        except Exception:
+            pass
 
         no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
         return (no_rag[:5], [])
@@ -4356,7 +4430,7 @@ class ReasoningAgent(BaseAgent):
             self.memory.set("last_tool", tool_name)
             self.memory.set("last_exec_payload", {"tool_name": tool_name, "payload": payload})
             dbg("RETURN.no_solution")
-            return {"type": "final_feedback","text": "\n\n".join(md),"perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
+            return {"type": "final_feedback","text": "\n\n".join(md),"perf_spans": self._perf_finalize_spans(),
             "raw_result": result, "next_actions_hint": (
                 "想變更條件？回覆「再加條件」可在現有基礎上加新限制；"
                 "回覆「重設條件」會清空所有條件並回到設定階段。"
@@ -4364,8 +4438,9 @@ class ReasoningAgent(BaseAgent):
             )}
 
         # ===== 生成摘要 / KPI（外部渲染器；可為空則 fallback） =====
-        external_md = self._call_external_renderer(tool_name, result, payload, labels)
-        dbg("external_md.exists", bool(external_md))
+        # external renderer can be expensive; defer until after report_mode is known
+        external_md = ""
+        dbg("external_md.deferred", True)
 
         budget_field = TOOL_MAP.get(tool_name, {}).get("budget_field")
         user_params  = (payload.get("user_params") or {}) if isinstance(payload, dict) else {}
@@ -4429,7 +4504,7 @@ class ReasoningAgent(BaseAgent):
                     "- 先以「最小化稅額」模式估算在現有約束下的稅額下限；若下限仍高於上限，需提高上限或放寬條件。",
                 ]
                 dbg("RETURN.maximize.baseline_over_budget")
-                return {"type": "final_feedback","text": "\n".join(msg),"perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
+                return {"type": "final_feedback","text": "\n".join(msg),"perf_spans": self._perf_finalize_spans(),
             "raw_result": result, "next_actions_hint": (
                     "想變更條件？回覆「再加條件」可在現有基礎上加新限制；"
                     "回覆「重設條件」會清空所有條件並回到設定階段。"
@@ -4634,11 +4709,36 @@ class ReasoningAgent(BaseAgent):
         if not suggestions:
             suggestions = ["若有特定目標（例如：總稅額不超過 X 元），可加入稅額上限或比例/上下界等構造性約束，讓模型探索更彈性的組合。"]
 
-        try:
-            rag_sugs, rag_sources = await self._rag_advice_from_result(tool_name, result, payload, labels)
-        except Exception as e:
-            dbg("rag_advice.error", str(e))
-            rag_sugs, rag_sources = [], []
+        # ===== report mode switch (full / fast / template) =====
+        # - full: do RAG + LLM advice_json_basic
+        # - fast: skip RAG, still call advice_json_basic once (cheaper)
+        # - template: no RAG, no LLM; use rule-based `suggestions` only
+        report_mode = (
+            (payload or {}).get("report_mode")
+            or (getattr(self, "memory", None).get("report_mode") if getattr(self, "memory", None) else None)
+            or os.getenv("TAX_REPORT_MODE", "full")
+        )
+        report_mode = str(report_mode or "full").strip().lower()
+
+        fast_compute = report_mode in {"fast", "lite", "no_rag", "template", "rule", "no_llm"}
+        # knobs (env overrides)
+        use_external_renderer = (os.getenv("TAX_USE_EXTERNAL_RENDERER", "1") == "1") and (not fast_compute)
+        persist_files = (os.getenv("TAX_PERSIST_REPORT_FILES", "1") == "1") and (not fast_compute)
+
+        rag_sugs, rag_sources = [], []
+        if report_mode in {"template", "rule", "no_llm"}:
+            # keep rag_sugs empty -> will fall back to suggestions
+            pass
+        else:
+            try:
+                if report_mode in {"fast", "lite", "no_rag"}:
+                    rag_sugs = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
+                    rag_sources = []
+                else:
+                    rag_sugs, rag_sources = await self._rag_advice_from_result(tool_name, result, payload, labels)
+            except Exception as e:
+                dbg("rag_advice.error", str(e))
+                rag_sugs, rag_sources = [], []
 
         final_suggestions = rag_sugs if rag_sugs else suggestions
         dbg("final_suggestions.count", len(final_suggestions))
@@ -4786,22 +4886,34 @@ class ReasoningAgent(BaseAgent):
             except Exception:
                 sections.append("prev_diff")
 
-        _external_md = self._call_external_renderer(tool_name, result, payload, labels)
-        if _external_md:
+        # external renderer (optional). In fast_compute we skip it by default.
+        if (not external_md) and use_external_renderer:
+            try:
+                with self._perf_span("render:external_renderer"):
+                    external_md = self._call_external_renderer(tool_name, result, payload, labels)
+            except Exception as e:
+                dbg("external_renderer.error", str(e))
+                external_md = ""
+        dbg("external_md.exists", bool(external_md))
+        if external_md:
             # 先固定放我們算出的摘要＋KPI（含「上一次比較」），再接外部版型
-            draft_md = "\n\n".join([blocks.get("summary",""), blocks.get("kpis","")]).strip() + "\n\n" + _external_md
+            draft_md = "\n\n".join([blocks.get("summary",""), blocks.get("kpis","")]).strip() + "\n\n" + external_md
         else:
             draft_md = "\n\n".join([blocks[s] for s in sections if blocks.get(s)])
 
         dbg("draft_md.len", len(draft_md) if isinstance(draft_md, str) else None)
 
-        # 單次 LLM 精修，失敗就 fallback
-        try:
-            final_once = await self._render_once_with_llm(draft_md, result, tool_name, labels)
-            final_md = final_once if final_once else draft_md
-        except Exception as e:
-            dbg("render_once_with_llm.error", str(e))
+        # 單次 LLM 精修（可能很慢）；fast_compute 預設跳過
+        if fast_compute:
             final_md = draft_md
+        else:
+            try:
+                with self._perf_span("llm:render_once_with_llm"):
+                    final_once = await self._render_once_with_llm(draft_md, result, tool_name, labels)
+                final_md = final_once if final_once else draft_md
+            except Exception as e:
+                dbg("render_once_with_llm.error", str(e))
+                final_md = draft_md
 
         # 報告本文不再附帶操作提示；提示改隨回傳物件提供，供 UI 端分開顯示
         final_md = final_md.rstrip()
@@ -4831,15 +4943,20 @@ class ReasoningAgent(BaseAgent):
             dbg("persist.memory.__latest_report__.set", {"has_md": True, "has_json": bool(result)})
 
             # 2) 檔案（reports/last_run/last.md & last.json）
-            base_dir = "reports/last_run"
-            os.makedirs(base_dir, exist_ok=True)
-            md_path = os.path.join(base_dir, "last.md")
-            json_path = os.path.join(base_dir, "last.json")
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write(final_md)
-            with open(json_path, "w", encoding="utf-8") as f:
-                _json.dump(result, f, ensure_ascii=False, indent=2, default=str)
-            dbg("persist.files.written", {"md": md_path, "json": json_path})
+            if persist_files:
+                with self._perf_span("io:persist_report_files"):
+                    base_dir = "reports/last_run"
+                    os.makedirs(base_dir, exist_ok=True)
+                    md_path = os.path.join(base_dir, "last.md")
+                    json_path = os.path.join(base_dir, "last.json")
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(final_md)
+                    with open(json_path, "w", encoding="utf-8") as f:
+                        _json.dump(result, f, ensure_ascii=False, indent=2, default=str)
+                    dbg("persist.files.written", {"md": md_path, "json": json_path})
+            else:
+                dbg("persist.files.skipped", {"persist_files": persist_files})
+
         except Exception as e:
             dbg("persist.error", str(e))
         # <<< PATCH B
@@ -4915,7 +5032,7 @@ class ReasoningAgent(BaseAgent):
         return {
             "type": "final_feedback",
             "text": final_md,
-            "perf_spans": self._perf_finalize_spans(), "perf_spans": self._perf_finalize_spans(),
+            "perf_spans": self._perf_finalize_spans(),
             "raw_result": result,
             "next_actions_hint": "想變更條件？回覆「再加條件」可在現有基礎上加新限制；回覆「重設條件」會清空所有條件並回到設定階段。若要 **以此輪報告作為輸出報告**，請輸入「計算完成」。"
         }
