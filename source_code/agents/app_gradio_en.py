@@ -23,7 +23,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s"
 )
 
-from source_code.agents.multi_agent_tax_system_en import (
+from multi_agent_tax_system_en import (
     CallerAgent,
     ConstraintAgent,
     ExecuteAgent,

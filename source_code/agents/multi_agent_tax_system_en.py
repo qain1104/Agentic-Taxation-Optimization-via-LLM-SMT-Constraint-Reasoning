@@ -493,7 +493,7 @@ MEMORY = MemoryStore()
 # Tool registry
 # ---------------------------------------------------------------------------
 
-from tools_registry import TOOLS  # noqa: F401
+from tools_registry_en import TOOLS  # noqa: F401
 
 # Build global Chroma index once
 _docs = [f"{t['name']} ::: {';'.join(t['keywords'])}" for t in TOOLS]
