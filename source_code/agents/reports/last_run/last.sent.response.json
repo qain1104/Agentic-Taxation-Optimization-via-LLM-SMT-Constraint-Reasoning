@@ -1,6 +1,0 @@
-{
-  "ok": false,
-  "status_code": null,
-  "error": "[Errno 8] nodename nor servname provided, or not known",
-  "delivered_to": "http://fin-backend:6677/report/generated/fin-tax"
-}
