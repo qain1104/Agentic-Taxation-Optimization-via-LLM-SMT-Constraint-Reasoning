@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Agent runtime
+source_code/agents/logs/
+source_code/agents/reports/
+lt_memory.json
+
+# RAG cache
+source_code/agents/rag/chroma/
+
+# Code synthesis artifacts
+source_code/code_synthesis/
+source_code/json_and_csv/
+
+
+# Env
+.env
