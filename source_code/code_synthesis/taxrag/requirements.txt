@@ -1,0 +1,7 @@
+pdfplumber
+pandas
+chromadb
+python-dotenv
+gradio
+openai
+z3-solver
