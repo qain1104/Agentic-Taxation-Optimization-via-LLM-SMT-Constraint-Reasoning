@@ -174,9 +174,8 @@ def _calculate_foreigner_tax_internal(
     _add_param("cnt_under_70", cnt_under_70)
     _add_param("cnt_over_70", cnt_over_70)
 
-    # 0/1 guardrails
-    _add_param("disability_count", disability_count, lambda v: And(v >= 0, v <= 1))
-    _add_param("long_term_care_count", long_term_care_count, lambda v: And(v >= 0, v <= 1))
+    _add_param("disability_count", disability_count, lambda v: And(v >= 0))
+    _add_param("long_term_care_count", long_term_care_count, lambda v: And(v >= 0))
 
     _add_param("education_count", education_count)
     _add_param("education_fee", education_fee)
