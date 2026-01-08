@@ -1,0 +1,275 @@
+114年度（民國114年）參數整理（由附件程式碼擷取）
+產出日期（Asia/Taipei）：2026-01-04
+註：本檔僅整理『程式碼內寫死/預設』的稅率、級距、免稅額、扣除額等參數；未額外比對最新法規。
+
+
+================================================================================
+income_tax.py ─ 綜合所得稅（DEFAULTS）
+================================================================================
+
+- basic_living_exp_per_person: 210,000
+- savings_investment_deduction_limit: 270,000
+- disability_deduction_per_person: 218,000
+- education_deduction_per_student: 25,000
+- long_term_care_deduction_per_person: 120,000
+- rent_deduction_limit: 180,000
+- personal_exemption_under70: 97,000
+- personal_exemption_over70: 145,500
+- standard_deduction_single: 131,000
+- standard_deduction_married: 262,000
+- salary_special_deduction_max: 218,000
+- bracket1_upper: 590,000
+- bracket2_upper: 1,330,000
+- bracket3_upper: 2,660,000
+- bracket4_upper: 4,980,000
+- bracket1_rate: 0.05 (5%)
+- bracket2_rate: 0.12 (12%)
+- bracket3_rate: 0.2 (20%)
+- bracket4_rate: 0.3 (30%)
+- bracket5_rate: 0.4 (40%)
+- bracket1_sub: 0
+- bracket2_sub: 41,300
+- bracket3_sub: 147,700
+- bracket4_sub: 413,700
+- bracket5_sub: 911,700
+
+================================================================================
+foreigner_income_tax.py ─ 外僑綜合所得稅（DEFAULTS）
+================================================================================
+
+- basic_living_exp_per_person: 210,000
+- savings_investment_deduction_limit: 270,000
+- disability_deduction_per_person: 218,000
+- education_deduction_per_student: 25,000
+- long_term_care_deduction_per_person: 120,000
+- rent_deduction_limit: 180,000
+- personal_exemption_under70: 97,000
+- personal_exemption_over70: 145,500
+- standard_deduction_single: 131,000
+- standard_deduction_married: 262,000
+- salary_special_deduction_max: 218,000
+- bracket1_upper: 590,000
+- bracket2_upper: 1,330,000
+- bracket3_upper: 2,660,000
+- bracket4_upper: 4,980,000
+- bracket1_rate: 0.05 (5%)
+- bracket2_rate: 0.12 (12%)
+- bracket3_rate: 0.2 (20%)
+- bracket4_rate: 0.3 (30%)
+- bracket5_rate: 0.4 (40%)
+- bracket1_sub: 0
+- bracket2_sub: 41,300
+- bracket3_sub: 147,700
+- bracket4_sub: 413,700
+- bracket5_sub: 911,700
+- amt_basic_income_deduction: 7,500,000
+
+================================================================================
+gift_tax.py ─ 贈與稅（period_choice 參數）
+================================================================================
+
+period_choice==1：
+- 公式：N = T0 - remaining_exemption_98 - D
+- 稅率：10%（RATE=0.10），無累進差額（PD=0）
+
+period_choice==2：
+- 免稅額：2,200,000（N = TA - 2,200,000 - D）
+- 級距：≤25,000,000 / 25,000,000~50,000,000 / >50,000,000
+- 稅率：10% / 15% / 20%
+- 累進差額（PD）：0 / 1,250,000 / 3,750,000
+
+period_choice==3：
+- 免稅額：2,440,000（N = TA - 2,440,000 - D）
+- 級距：≤25,000,000 / 25,000,000~50,000,000 / >50,000,000
+- 稅率：10% / 15% / 20%
+- 累進差額（PD）：0 / 1,250,000 / 3,750,000
+
+period_choice==4：
+- 免稅額：2,440,000（N = TA - 2,440,000 - D）
+- 級距：≤28,110,000 / 28,110,000~56,210,000 / >56,210,000
+- 稅率：10% / 15% / 20%
+- 累進差額（PD）：0 / 1,405,500 / 4,216,000
+
+
+================================================================================
+estate_tax.py ─ 遺產稅（death_period / is_military_police 參數）
+================================================================================
+
+免稅額（base_ex_amt）與喪葬費（funeral_amt）：
+- death_period in (1,2)：base_ex_amt=12,000,000；funeral_amt=1,230,000
+- death_period in (3,4,5)：base_ex_amt=13,330,000；funeral_amt=1,230,000（period=3）或 1,380,000（period=4,5）
+- is_military_police=True：base_ex_amt 會再 ×2
+
+扣除額（依人數計）：
+- 配偶（spouse_count）：4,930,000（death_period<=3）或 5,530,000（death_period>3）
+- 直系卑親屬（lineal_descendant_count）：500,000（<=3）或 560,000（>3）
+- 受扶養親屬（dependent_count）：500,000（<=3）或 560,000（>3）
+- 父母（father_mother_count）：1,230,000（<=3）或 1,380,000（>3）
+- 身心障礙（disability_count）：6,180,000（<=3）或 6,930,000（>3）
+
+稅率級距（以 tax_inherit 為基礎）：
+- death_period==1：10%（累進差額 bracket_d=0）
+- death_period in (2,3,4)：
+  • ≤50,000,000：10% / d=0
+  • 50,000,000~100,000,000：15% / d=2,500,000
+  • >100,000,000：20% / d=7,500,000
+- death_period==5（程式條件為 death_period>4）：
+  • ≤56,210,000：10% / d=0
+  • 56,210,000~112,420,000：15% / d=2,810,500
+  • >112,420,000：20% / d=8,431,500
+
+
+================================================================================
+tobacco_alcohol_tax.py ─ 菸酒稅（ITEMS）
+================================================================================
+
+slug              | 中文      | 類型      | 計算參數                                 | 需ABV?
+------------------+---------+---------+--------------------------------------+------
+cigarettes_new    | 紙菸-新制   | tobacco | base=1,590, div=1,000, base/div=1.59 | False
+tobacco_cut_new   | 菸絲-新制   | tobacco | base=1,590, div=1, base/div=1590     | False
+cigar_new         | 雪茄-新制   | tobacco | base=1,590, div=1, base/div=1590     | False
+tobacco_other_new | 其他菸品-新制 | tobacco | base=1,590, div=1, base/div=1590     | False
+cigarettes_old    | 紙菸-舊制   | tobacco | base=1,590, div=1,000, base/div=1.59 | False
+tobacco_cut_old   | 菸絲-舊制   | tobacco | base=1,590, div=1, base/div=1590     | False
+cigar_old         | 雪茄-舊制   | tobacco | base=1,590, div=1, base/div=1590     | False
+tobacco_other_old | 其他菸品-舊制 | tobacco | base=1,590, div=1, base/div=1590     | False
+beer              | 釀造 → 啤酒 | alcohol | rate=(const, 26)                     | False
+brew_other        | 釀造 → 其他 | alcohol | rate=(abv, 7)                        | True 
+distilled         | 蒸餾酒類    | alcohol | rate=(abv, 2.5)                      | True 
+reprocessed_gt20  | 再製 >20% | alcohol | rate=(const, 185)                    | False
+reprocessed_le20  | 再製 ≤20% | alcohol | rate=(abv, 7)                        | True 
+cooking_wine      | 料理酒     | alcohol | rate=(const, 9)                      | False
+cooking_wine_old  | 料理酒-舊   | alcohol | rate=(const, 22)                     | False
+alcohol_other     | 其他酒類    | alcohol | rate=(abv, 7)                        | True 
+ethanol           | 酒精      | alcohol | rate=(const, 15)                     | False
+ethanol_old       | 酒精-舊    | alcohol | rate=(const, 11)                     | False
+
+
+================================================================================
+special_tax.py ─ 特種貨物及勞務稅
+================================================================================
+
+- 稅率（RATE）：0.1 (10%)
+- 類別（CATEGORIES）：car, yacht, aircraft, coral_ivory, furniture
+
+
+================================================================================
+securities_and_futures_transaction_tax.py ─ 證券/期貨交易稅（品項與稅率）
+================================================================================
+
+證券（SEC_ITEMS）：
+slug                   | 中文            | fields | 稅基公式  | 稅率          
+-----------------------+---------------+--------+-------+-------------
+stock                  | （一）公司股票／股權證書  | tp     | tp    | 0.003 (0.3%)
+bond                   | （二）公司債及其他有價證券 | tp     | tp    | 0.001 (0.1%)
+warrant                | （三）認購（售）權證    | tp     | tp    | 0.001 (0.1%)
+warrant_delivery_stock | （四）權證履約—股票移轉  | ep,sc  | ep*sc | 0.003 (0.3%)
+warrant_delivery_cash  | （四）權證履約—現金結算  | ep,sc  | ep*sc | 0.001 (0.1%)
+
+期貨（FUT_ITEMS）：
+slug             | 中文           | fields | 稅基公式 | 稅率                      | qty欄位
+-----------------+--------------+--------+------+-------------------------+------
+stock_index      | （一）股價期貨      | ca     | ca   | 0.00002 (0.002%)        | ca   
+interest_rate_30 | （二）利率期貨30天CP | ca     | ca   | 0.000000125 (0.000012%) | ca   
+interest_rate_10 | （二）利率期貨10年期債 | ca     | ca   | 0.00000125 (0.000125%)  | ca   
+option           | （三）選擇權及期貨選擇權 | pa,ca  | pa   | 0.001 (0.1%)            | pa   
+gold             | （四）黃金期貨      | ca     | ca   | 0.0000025 (0.00025%)    | ca   
+
+
+================================================================================
+sale_tax.py ─ 營業稅
+================================================================================
+
+- 加值型（VAT）：程式內固定以 5% 計算（output_tax_amt * 0.05、input_tax_amt * 0.05）
+- 非加值型（NVAT_RATE）：
+類別代碼 | 稅率          
+-----+-------------
+1    | 0.01 (1%)   
+2    | 0.01 (1%)   
+3    | 0.02 (2%)   
+4    | 0.05 (5%)   
+5    | 0.05 (5%)   
+6    | 0.15 (15%)  
+7    | 0.25 (25%)  
+8    | 0.001 (0.1%)
+
+
+================================================================================
+high_consumption_goods_and_services_tax.py ─ 高級消費貨物及勞務稅
+================================================================================
+
+- 稅率（RATE）：0.1 (10%)
+
+
+================================================================================
+cargo_tax.py ─ 貨物稅（ITEMS）
+================================================================================
+
+說明：mode=fixed → unit_tax（固定稅額）；mode=adval → rate（從價稅率）。
+slug                  | 中文          | mode  | unit_tax | rate      
+----------------------+-------------+-------+----------+-----------
+cement_white          | 白水泥         | fixed | 600      |           
+cement_portland_I     | 卜特蘭I型水泥     | fixed | 320      |           
+cement_blast_furnace  | 卜特蘭高爐水泥     | fixed | 196      |           
+cement_other          | 代水泥及其他      | fixed | 440      |           
+oil_gasoline          | 汽油          | fixed | 6,830    |           
+oil_diesel            | 柴油          | fixed | 3,990    |           
+oil_kerosene          | 煤油          | fixed | 4,250    |           
+oil_jetfuel           | 航空燃油        | fixed | 610      |           
+oil_fueloil           | 燃料油         | fixed | 110      |           
+oil_solvent           | 溶劑油         | fixed | 720      |           
+lpg                   | 液化石油氣       | fixed | 690      |           
+tire_bus_truck        | 大客/大貨車輪胎    | adval |          | 0.1 (10%) 
+tire_other            | 其他橡膠輪胎      | adval |          | 0.15 (15%)
+tire_inner_solid      | 內胎/實心輪胎等    | adval |          | 0         
+drink_diluted_juice   | 稀釋天然果蔬汁     | adval |          | 0.08 (8%) 
+drink_other           | 其他飲料        | adval |          | 0.15 (15%)
+drink_pure_juice      | 天然果汁類       | adval |          | 0         
+glass_plain           | 一般平板玻璃      | adval |          | 0.1 (10%) 
+glass_conductive_mold | 導電/模具用玻璃    | adval |          | 0         
+fridge                | 冰箱          | adval |          | 0.13 (13%)
+tv                    | 彩色電視機       | adval |          | 0.13 (13%)
+hvac_central          | 中央空調        | adval |          | 0.15 (15%)
+hvac_non_central      | 非中央空調       | adval |          | 0.2 (20%) 
+dehumidifier          | 除濕機         | adval |          | 0.15 (15%)
+vcr                   | 錄影機         | adval |          | 0.13 (13%)
+recorder              | 錄音機         | adval |          | 0.1 (10%) 
+stereo                | 音響組合        | adval |          | 0.1 (10%) 
+oven                  | 電烤箱         | adval |          | 0.15 (15%)
+car_le_2000cc         | 小客車 ≤2000cc | adval |          | 0.25 (25%)
+car_gt_2000cc         | 小客車 >2000cc | adval |          | 0.3 (30%) 
+truck_bus             | 貨車/大客車等     | adval |          | 0.15 (15%)
+motorcycle            | 機車          | adval |          | 0.17 (17%)
+================================================================================
+business_income_tax.py ─ 營利事業所得稅（DEFAULTS / 級距與稅率）
+================================================================================
+
+- input 參數預設值：所有收支/扣除欄位預設為 0
+  - OperatingRevenueTotal, SalesReturn, SalesAllowance, OperatingCost,
+    OperatingExpensesLosses, NonOperatingRevenueTotal, NonOperatingLossExpenses,
+    Prev10LossDeduction, TaxIncentiveExempt, ExemptSecuritiesIncome,
+    ExemptLandIncome, Article4_4HouseLandGain
+
+- 預設期間參數
+  - is_full_year: True
+  - m_partial: 12  （僅在 is_full_year=False 時使用，代表課稅月份數）
+
+- 稅負計算級距常數（程式碼內變數 FULL1 / FULL2）
+  - FULL1: 120,000
+  - FULL2: 200,000
+
+- 稅額公式（以課稅所得額 P 為基礎；is_full_year=True）
+  - P ≤ 120,000 → tax = 0
+  - 120,000 < P ≤ 200,000 → tax = (P - 120,000) × 0.5  （即半數課稅）
+  - P > 200,000 → tax = P × 0.2  (20%)
+
+- 非全年（is_full_year=False）調整方式
+  - P_adj = P × 12 / m_partial
+  - 先以 P_adj 套用上述級距求稅，再乘回 (m_partial / 12)
+
+- P 計算中「直接扣除」的項目（以 input 參數名稱表示）
+  - Prev10LossDeduction（前 10 年虧損扣除）
+  - TaxIncentiveExempt（租稅優惠免稅/減免）
+  - ExemptSecuritiesIncome（證券交易免稅所得）
+  - ExemptLandIncome（土地交易免稅所得）
+  - Article4_4HouseLandGain（所得稅法第 4 條之 4 房地合一相關）

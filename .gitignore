@@ -15,7 +15,7 @@ source_code/code_synthesis/json_and_csv/
 source_code/code_synthesis/runs/
 source_code/code_synthesis/chroma/
 source_code/json_and_csv/
-
+source_code/code_synthesis/generated_tax_solver.py
 
 # Env
 .env
