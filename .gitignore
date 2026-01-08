@@ -11,7 +11,9 @@ lt_memory.json
 source_code/agents/rag/chroma/
 
 # Code synthesis artifacts
-source_code/code_synthesis/
+source_code/code_synthesis/json_and_csv/
+source_code/code_synthesis/runs/
+source_code/code_synthesis/chroma/
 source_code/json_and_csv/
 
 
