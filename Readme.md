@@ -64,23 +64,141 @@ At the top level, the repository is organized as follows:
 
 ```text
 .
-├── source_code/      # Full agentic system implementation, Docker setup, SMT code
-│   ├── agents/
-│   ├── tax_calculators/
-│   ├── parsers/
-│   ├── reports/
-│   ├── logs/
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── requirements.txt
-│   ├── app.py
-│   ├── multi_agent_tax_system.py
-│   └── Readme.md     # Original system-level notes
-├── rq1/              # Material for RQ1: correctness / portal-alignment experiments
-├── rq2/              # Material for RQ2: optimization / baseline comparison
-├── rq3/              # (planned) Material for RQ3
-├── LICENSE
-└── README.md         # Artifact-level README (this file)
+├── Readme.md
+└── source_code
+    ├── Dockerfile
+    ├── Readme.md
+    ├── __pycache__
+    ├── agents
+    │   ├──  __init__.py
+    │   ├── app_gradio.py
+    │   ├── integrations
+    │   │   ├── __pycache__
+    │   │   │   └── fintax_api.cpython-311.pyc
+    │   │   └── fintax_api.py
+    │   ├── logs
+    │   │   └── tax_app.log
+    │   ├── lt_memory.json
+    │   ├── multi_agent_tax_system.py
+    │   ├── parsers
+    │   │   ├── cargo_nl_parser.py
+    │   │   ├── futures_nl_parser.py
+    │   │   ├── nvat_nl_parser.py
+    │   │   ├── securities_nl_parser.py
+    │   │   ├── special_goods_nl_parser.py
+    │   │   ├── ta_nl_parser.py
+    │   │   └── vat_nl_parser.py
+    │   ├── rag
+    │   │   ├── README.md
+    │   │   ├── chroma
+    │   │   ├── ingest_pdfs.py
+    │   │   ├── ingest_urls.py
+    │   │   ├── pdfs
+    │   │   │   ├── 114年貨物稅節稅手冊(PDF檔).pdf
+    │   │   │   ├── 114年營利事業所得稅-節稅手冊.pdf
+    │   │   │   ├── Readme.md
+    │   │   │   ├── 國稅節稅手冊.pdf
+    │   │   │   ├── 菸酒稅節稅手冊(PDF).pdf
+    │   │   │   ├── 營業稅節稅手冊.pdf
+    │   │   │   ├── 期貨交易稅節稅手冊_(1).pdf
+    │   │   │   └── 證券交易稅節稅手冊_(1).pdf
+    │   │   ├── test_search.py
+    │   │   ├── tools
+    │   │   │   └── clear_index.py
+    │   │   └── urls.txt
+    │   ├── report_renderer.py
+    │   ├── reports
+    │   │   └── last_run
+    │   └── tools_registry.py
+    ├── app.py
+    ├── code_synthesis
+    │   ├── Readme.md
+    │   ├── chroma
+    │   ├── generated_tax_solver.py
+    │   ├── inputs
+    │   │   ├── business_income.txt
+    │   │   ├── business_tax.txt
+    │   │   ├── cargo_tax.txt
+    │   │   ├── estate_input.txt
+    │   │   ├── foreign_income_tax.txt
+    │   │   ├── gift_tax_input.txt
+    │   │   ├── income_tax.txt
+    │   │   ├── security_futures.txt
+    │   │   ├── special_goods_services.txt
+    │   │   └── ta_tax.txt
+    │   ├── json_and_csv
+    │   │   ├── all_laws.csv
+    │   │   └── all_laws.json
+    │   ├── protal_samples
+    │   │   └── income_tax_samples.json ...
+    │   ├── refs
+    │   │   └── 114_numbers.txt
+    │   ├── runs
+    │   ├── tax_agent_pipeline.py
+    │   └── taxrag
+    │       ├── __init__.py
+    │       ├── __main__.py
+    │       ├── chroma_store.py
+    │       ├── config.py
+    │       ├── documents
+    │       │   ├── 所得稅法.pdf
+    │       │   ├── 菸酒稅法.pdf
+    │       │   ├── 期貨交易法.pdf
+    │       │   ├── 證券交易法.pdf
+    │       │   ├── 貨物稅條例.pdf
+    │       │   ├── 期貨交易稅條例.pdf
+    │       │   ├── 證券交易稅條例.pdf
+    │       │   ├── 遺產及贈與稅法.pdf
+    │       │   ├── 所得基本稅額條例.pdf
+    │       │   ├── 所得稅法施行細則.pdf
+    │       │   ├── 期貨交易法施行細則.pdf
+    │       │   ├── 證券交易法施行細則.pdf
+    │       │   ├── 特種貨物及勞務稅條例.pdf
+    │       │   ├── 營利事業所得稅查核準則.pdf
+    │       │   ├── 遺產及贈與稅法施行細則.pdf
+    │       │   ├── 加值型及非加值型營業稅法.pdf
+    │       │   ├── 特種貨物及勞務稅條例施行細則.pdf
+    │       │   ├── 加值型及非加值型營業稅法施行細則.pdf
+    │       │   └── 特種貨物及勞務稅稅課收入分配及運用辦法.pdf
+    │       ├── pdf_ingest.py
+    │       ├── readme.md
+    │       ├── requirements.txt
+    │       ├── structure.py
+    │       └── ui.py
+    ├── docker-compose.yml
+    ├── json_and_csv
+    │   ├── all_laws.csv
+    │   └── all_laws.json
+    ├── requirements.txt
+    ├── selenium_test_records
+    │   ├── 01.綜合所得稅income_tax.ipynb
+    │   ├── 02.外僑稅額試算_foregin_income_tax.ipynb
+    │   ├── 03.營利事業所得稅_enterprise_income.ipynb
+    │   ├── 04.營業稅_business_tax.ipynb
+    │   ├── 05.貨物稅_cargo_tax.ipynb
+    │   ├── 06.菸酒稅_ta_tax.ipynb
+    │   ├── 07.遺產稅_estate_tax.ipynb
+    │   ├── 08.贈與稅_gift_tax.ipynb
+    │   ├── 09.證交期交稅_security_futures.ipynb
+    │   ├── 10.特種貨物及勞務稅_special_services_goods.ipynb
+    │   └── Readme.md
+    └── tax_calculators
+        ├── __init__.py
+        ├── business_income_tax.py
+        ├── cargo_tax.py
+        ├── constraint_utils.py
+        ├── estate_tax.py
+        ├── foreigner_income_tax.py
+        ├── gift_tax.py
+        ├── high_consumption_goods_and_services_tax.py
+        ├── income_tax.py
+        ├── main.py
+        ├── sale_tax.py
+        ├── securities_and_futures_transaction_tax.py
+        ├── special_tax.py
+        ├── tax_calculator.py
+        ├── tobacco_alcohol_tax.py
+        └── util.py 
 ```
 
 ### `source_code/`
