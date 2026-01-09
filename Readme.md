@@ -54,7 +54,7 @@ We intend this artifact to qualify for the following ICSE / ACM badges:
 
 - Paper: _Agentic Taxation Optimization via LLM SMT-Constraint Reasoning_ (ICSE 2026 SEIP).  
 - Preprint: <!-- TODO: add arXiv / institutional link if available -->  
-- Archived artifact DOI: <!-- TODO: add Zenodo / Figshare DOI once created -->
+- Archived artifact DOI: https://doi.org/10.5281/zenodo.18182268
 
 ---
 
@@ -90,7 +90,6 @@ This directory contains the implementation of the agentic tax optimization servi
 - `agents/`  
   - Multi-agent orchestration and tool registry (Caller / Constraint / Execute / Reasoning).  
   - Frontends such as:
-    - `app_fastapi.py` — HTTP API (used for automated evaluation).  
     - `app_gradio.py` — Gradio UI (interactive demo).
   - Integrations in `agents/integrations/` (e.g., FIN backend webhook).
 
@@ -124,23 +123,39 @@ This directory contains the implementation of the agentic tax optimization servi
 
 > If you are only interested in using the system as a service, `source_code/` together with the Docker configuration is all you need.
 
-### `rq1/`
+# `source_code/code_synthesis`
 
-Artifacts related to **RQ1** (e.g., “Can we exactly reproduce the ministry portal’s tax computation?”):
+Artifacts related to **methodology: code synthesis layer**:
 
-- Scenario definitions comparing our system against the official portal.
-- Scripts to run the RQ1 evaluation and collect metrics.
-- Aggregated results used to produce the tables and figures in the paper.
-- A dedicated `rq1/README.md` describing the exact commands to reproduce RQ1.
+- **Legal Clause Retrieval & Tax Code Generation**:  
+  This directory contains the core functionality for retrieving tax law clauses from a Chroma vector store and synthesizing tax code based on the retrieved clauses using advanced LLMs.
 
-### `rq2/`
+- **PDF Ingestion Scripts**:  
+  Scripts for ingesting legal documents (such as tax law PDFs) and converting them into a format suitable for indexing and retrieval in the Chroma vector store.
+
+- **Chroma Integration**:  
+  Files responsible for building the Chroma store with legal documents, as well as querying the stored clauses during the code generation process.
+
+- **Code Synthesis Pipeline**:  
+  A pipeline that generates and repairs tax computation code, using reasoning techniques to ensure accuracy and compliance with legal frameworks.
+
+- **`README.md`**:  
+  A comprehensive guide describing the steps and required dependencies to execute the pipeline, including how to ingest documents, build the Chroma store, and run the code generation pipeline.
+
+- **Metrics Collection**:  
+  Scripts and outputs used for evaluating the effectiveness of the generated tax computation code, including performance metrics and comparison results.
+
+This directory is crucial for understanding the **code synthesis methodology** and reproducing the experiments.
+
+
+### `source_code/selenium_test_records`
 
 Artifacts related to **RQ2: Generalization to Unseen Inputs / Constraint Code Accuracy**:
 
 - Random test-case generators that sample inputs within each portal field’s domain while respecting UI guards (e.g., spouse fields only when `married=true`, valid ranges/enums, precision constraints).
 - Scripts to run Monte-Carlo validation by comparing our synthesized SMT solvers against the official MoF eTax calculators on large batches of unseen cases per regime.
 - Collected mismatch logs (if any), per-regime accuracy summaries, and scripts to regenerate the accuracy numbers reported in the paper (solver = 100% vs GPT-5-level prompt-only baseline).
-- A dedicated `rq2/README.md` describing the exact commands to reproduce the RQ2 experiments.
+- A dedicated `source_code/selenium_test_records/Readme.md` describing the exact commands to reproduce the RQ2 experiments.
 
 ### `rq3/`
 
