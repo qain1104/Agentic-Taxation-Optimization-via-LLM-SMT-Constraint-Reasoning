@@ -113,6 +113,42 @@ DEFAULT_CODE_CONTRACT = """
   - 不得把 sample idx、expected、mismatch table 的某列內容寫進程式碼作為條件。
 - 產出程式必須對「未出現過的新隨機樣本」也能合理計算。
 - 若違反，視為不合格，即使 samples 全部 PASS 也算 FAIL。
+
+【SMT 程式生成強制規範（請嚴格遵守，違反視為不合格）】
+    A) 型別一致性（最重要）
+    - 所有「金額/稅額/人數/門檻/級距」一律使用 z3.Int。
+    - 布林條件可用 Python bool 做 sanitize，但進入 SMT 後：
+    - 若用 z3.Bool：請用 If(bool_expr, ..., ...)
+    - 若用 Int(0/1)：請全程一致，不得混用 Bool 與 Int 當條件。
+    - 禁止在關鍵公式中使用 Python float（例如 0.05, 0.1）。百分比計算必須使用整數分子/分母：
+    - floor/trunc: (amount * num) // den
+    - round: (amount * num + den//2) // den   （amount 必須先約束為 >=0）
+
+    B) Z3 表達式規則
+    - 禁止 Python if/and/or/min/max 直接作用在 Z3 表達式上。
+    必須使用 z3.If / z3.And / z3.Or。
+    - 任何 cap/min/max/clamp 都必須用 If 寫出（例如 max(0,x) = If(x>=0,x,0)）。
+
+    C) 輸入綁定與健壯性
+    - compute_tax(**kwargs) 必須對 schema keys 做容錯讀取：
+    - 缺值 => 0
+    - 轉型失敗 => 0
+    - 負值 => clamp 成 0
+    - 每個輸入都必須「綁定」到 SMT 變數並加上非負約束：
+    x_py = sanitize(kwargs["x"])
+    x = Int("x"); s.add(x == x_py, x >= 0)
+
+    D) 建模結構（可修復、可稽核）
+    - 必須建立清楚的中間變數（例如 gross_income, deductions, taxable_income, tax_before_credit, tax）
+    並用等式約束逐步串起來；禁止把整個稅法流程塞進單一超長 expression。
+    - 最終稅額必須是 Int 變數 tax 並約束 tax >= 0，最後從 model 取值回傳：
+    assert s.check() == sat
+    return m.eval(tax, model_completion=True).as_long()
+
+    E) 可追溯註解
+    - 任何門檻/扣除額上限/稅率級距數字都必須在程式碼旁註解來源：
+    - REF:xxx.txt Lyy 或 RAG 條號/短句 或 WEB:domain
+
 """.strip()
 
 
@@ -135,7 +171,8 @@ PROMPT_TEMPLATE = r"""
 - ? 則是你要依據法條找到對應的數字（若補充參考有年度數字，優先使用）
 - ?? 是此 function 應 return 的數字
 - 請在程式碼中註解該 ? 取自哪一條相關文檔（用原文短句或條號即可），或註解「REF:xxx.txt Lyy」。
-
+- 若所有輸入皆為已給定的固定值，請使用 z3.Solver（不要使用 Optimize / minimize / maximize）。
+- 只有在題目要求「求最佳解/上下界」或存在 free variable 時才可用 Optimize。
 【Code Contract / Hard Requirements】
 {code_contract}
 """.strip()
@@ -1209,7 +1246,11 @@ async def _amain() -> None:
 
     args = parser.parse_args()
 
-    run_dir = Path(args.run_dir) if args.run_dir else Path("source_code/code_synthesis/runs") / _now_tag()
+
+    # --- run_dir naming: <schema>_<timestamp> ---
+    ts = _now_tag()
+    tax_name = Path(args.input).stem  # income_tax (from income_tax.txt)
+    run_dir = Path(args.run_dir) if args.run_dir else Path("source_code/code_synthesis/runs") / f"{tax_name}_{ts}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] run_dir: {run_dir}", flush=True)
 
