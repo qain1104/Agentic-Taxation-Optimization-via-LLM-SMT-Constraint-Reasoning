@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "inputs": { "category": "菸", "subcategory": 1, "quantity": 12500, "alcohol_content": null },
+    "expected": 32375
+  },
+  {
+    "id": 2,
+    "inputs": { "category": "菸", "subcategory": 6, "quantity": 42, "alcohol_content": null },
+    "expected": 66780
+  },
+  {
+    "id": 3,
+    "inputs": { "category": "菸", "subcategory": 3, "quantity": 15, "alcohol_content": null },
+    "expected": 38850
+  },
+  {
+    "id": 4,
+    "inputs": { "category": "菸", "subcategory": 4, "quantity": 108, "alcohol_content": null },
+    "expected": 279720
+  },
+  {
+    "id": 5,
+    "inputs": { "category": "菸", "subcategory": 5, "quantity": 5500, "alcohol_content": null },
+    "expected": 8745
+  },
+  {
+    "id": 6,
+    "inputs": { "category": "酒", "subcategory": 1, "quantity": 1250, "alcohol_content": 4.5 },
+    "expected": 32500
+  },
+  {
+    "id": 7,
+    "inputs": { "category": "酒", "subcategory": 3, "quantity": 85, "alcohol_content": 58.5 },
+    "expected": 12431.25
+  },
+  {
+    "id": 8,
+    "inputs": { "category": "酒", "subcategory": 4, "quantity": 210, "alcohol_content": 35.0 },
+    "expected": 38850
+  },
+  {
+    "id": 9,
+    "inputs": { "category": "酒", "subcategory": 6, "quantity": 500, "alcohol_content": 19.5 },
+    "expected": 4500
+  },
+  {
+    "id": 10,
+    "inputs": { "category": "酒", "subcategory": 2, "quantity": 155, "alcohol_content": 12 },
+    "expected": 13020
+  }
+]

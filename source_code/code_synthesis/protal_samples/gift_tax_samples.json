@@ -1,0 +1,194 @@
+[
+  {
+    "id": 1,
+    "inputs": {
+      "period_choice": 4,
+      "land_value": 80000000,
+      "ground_value": 0,
+      "house_value": 15000000,
+      "others_value": 10000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 5000000,
+      "land_increment_tax": 2500000,
+      "deed_tax": 300000,
+      "other_gift_burdens": 1000000,
+      "previous_gift_tax_or_credit": 256000
+    },
+    "expected": 16280000
+  },
+  {
+    "id": 2,
+    "inputs": {
+      "period_choice": 4,
+      "land_value": 35000000,
+      "ground_value": 500000,
+      "house_value": 2000000,
+      "others_value": 0,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 800000,
+      "deed_tax": 50000,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 3726000
+  },
+  {
+    "id": 3,
+    "inputs": {
+      "period_choice": 3,
+      "land_value": 28000000,
+      "ground_value": 0,
+      "house_value": 0,
+      "others_value": 5000000,
+      "not_included_land": 5000000,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 1200000,
+      "deed_tax": 0,
+      "other_gift_burdens": 500000,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 3079000
+  },
+  {
+    "id": 4,
+    "inputs": {
+      "period_choice": 2,
+      "land_value": 50000000,
+      "ground_value": 10000000,
+      "house_value": 5000000,
+      "others_value": 20000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 1000000,
+      "land_increment_tax": 4000000,
+      "deed_tax": 200000,
+      "other_gift_burdens": 5000000,
+      "previous_gift_tax_or_credit": 100000,
+      "new_old_system_adjustment": 150000
+    },
+    "expected": 10920000
+  },
+  {
+    "id": 5,
+    "inputs": {
+      "period_choice": 1,
+      "land_value": 12000000,
+      "ground_value": 0,
+      "house_value": 3000000,
+      "others_value": 500000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "remaining_exemption_98": 2200000,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 500000,
+      "deed_tax": 80000,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 1272000
+  },
+  {
+    "id": 6,
+    "inputs": {
+      "period_choice": 4,
+      "land_value": 10000000,
+      "ground_value": 0,
+      "house_value": 0,
+      "others_value": 20000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 25000000,
+      "land_increment_tax": 0,
+      "deed_tax": 0,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 2500000
+    },
+    "expected": 3978500
+  },
+  {
+    "id": 7,
+    "inputs": {
+      "period_choice": 3,
+      "land_value": 0,
+      "ground_value": 0,
+      "house_value": 0,
+      "others_value": 3000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 0,
+      "deed_tax": 0,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 56000
+  },
+  {
+    "id": 8,
+    "inputs": {
+      "period_choice": 4,
+      "land_value": 45000000,
+      "ground_value": 0,
+      "house_value": 5000000,
+      "others_value": 2000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 8000000,
+      "deed_tax": 600000,
+      "other_gift_burdens": 15000000,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 2596000
+  },
+  {
+    "id": 9,
+    "inputs": {
+      "period_choice": 2,
+      "land_value": 1000000,
+      "ground_value": 0,
+      "house_value": 0,
+      "others_value": 500000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 0,
+      "deed_tax": 0,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 0
+    },
+    "expected": 0
+  },
+  {
+    "id": 10,
+    "inputs": {
+      "period_choice": 4,
+      "land_value": 100000000,
+      "ground_value": 0,
+      "house_value": 0,
+      "others_value": 50000000,
+      "not_included_land": 0,
+      "not_included_house": 0,
+      "not_included_others": 0,
+      "previous_gift_sum_in_this_year": 0,
+      "land_increment_tax": 0,
+      "deed_tax": 0,
+      "other_gift_burdens": 0,
+      "previous_gift_tax_or_credit": 15000000
+    },
+    "expected": 10296000
+  }
+]

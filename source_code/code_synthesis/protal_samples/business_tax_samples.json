@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "inputs": {
+      "output_tax_val": 95275,
+      "input_tax_val": 39773
+    },
+    "expected": 55502
+  },
+  {
+    "id": 2,
+    "inputs": {
+      "sales_val": 246278,
+      "category": 3
+    },
+    "expected": 4926
+  },
+  {
+    "id": 3,
+    "inputs": {
+      "output_tax_val": 99974,
+      "input_tax_val": 19048
+    },
+    "expected": 80926
+  },
+  {
+    "id": 4,
+    "inputs": {
+      "sales_val": 648727,
+      "category": 8
+    },
+    "expected": 649
+  },
+  {
+    "id": 5,
+    "inputs": {
+      "output_tax_val": 21070,
+      "input_tax_val": 35197
+    },
+    "expected": -14127
+  },
+  {
+    "id": 6,
+    "inputs": {
+      "sales_val": 438261,
+      "category": 4
+    },
+    "expected": 21913
+  },
+  {
+    "id": 7,
+    "inputs": {
+      "output_tax_val": 31392,
+      "input_tax_val": 40290
+    },
+    "expected": -8898
+  },
+  {
+    "id": 8,
+    "inputs": {
+      "sales_val": 701569,
+      "category": 5
+    },
+    "expected": 35078
+  },
+  {
+    "id": 9,
+    "inputs": {
+      "output_tax_val": 51014,
+      "input_tax_val": 44215
+    },
+    "expected": 6799
+  },
+  {
+    "id": 10,
+    "inputs": {
+      "sales_val": 363445,
+      "category": 8
+    },
+    "expected": 363
+  }
+]

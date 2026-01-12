@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "inputs": { "big_category": "cement", "sub_category": "bute1", "quantity": 37 },
+    "expected": 11840
+  },
+  {
+    "id": 2,
+    "inputs": { "big_category": "oilgas", "sub_category": "lpg", "quantity": 43 },
+    "expected": 29670
+  },
+  {
+    "id": 3,
+    "inputs": { "big_category": "cement", "sub_category": "bute1", "quantity": 7 },
+    "expected": 2240
+  },
+  {
+    "id": 4,
+    "inputs": { "big_category": "oilgas", "sub_category": "lpg", "quantity": 30 },
+    "expected": 20700
+  },
+  {
+    "id": 5,
+    "inputs": { "big_category": "oilgas", "sub_category": "aviation", "quantity": 32 },
+    "expected": 19520
+  },
+  {
+    "id": 6,
+    "inputs": {
+      "big_category": "flat_glass",
+      "sub_category": "exempt",
+      "quantity": 3,
+      "assessed_price": 159369,
+      "is_electric": false
+    },
+    "expected": 0
+  },
+  {
+    "id": 7,
+    "inputs": {
+      "big_category": "rubber",
+      "sub_category": "bus_truck",
+      "quantity": 3,
+      "assessed_price": 230522,
+      "is_electric": false
+    },
+    "expected": 69156.6
+  },
+  {
+    "id": 8,
+    "inputs": {
+      "big_category": "flat_glass",
+      "sub_category": "regular",
+      "quantity": 4,
+      "assessed_price": 406274,
+      "is_electric": false
+    },
+    "expected": 162509.6
+  },
+  {
+    "id": 9,
+    "inputs": {
+      "big_category": "vehicle",
+      "sub_category": "large_car",
+      "quantity": 6,
+      "assessed_price": 297026,
+      "is_electric": false
+    },
+    "expected": 534646.8
+  },
+  {
+    "id": 10,
+    "inputs": {
+      "big_category": "flat_glass",
+      "sub_category": "regular",
+      "quantity": 4,
+      "assessed_price": 305837,
+      "is_electric": false
+    },
+    "expected": 122334.8
+  }
+]

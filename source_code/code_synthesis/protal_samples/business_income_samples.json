@@ -1,0 +1,202 @@
+[
+  {
+    "id": 1,
+    "inputs": {
+      "OperatingRevenueTotal_input": 5054863,
+      "SalesReturn_input": 129790,
+      "SalesAllowance_input": 19970,
+      "OperatingCost_input": 1372623,
+      "OperatingExpensesLosses_input": 2470691,
+      "NonOperatingRevenueTotal_input": 421235,
+      "NonOperatingLossExpenses_input": 401114,
+      "Prev10LossDeduction_input": 815822,
+      "TaxIncentiveExempt_input": 67552,
+      "ExemptSecuritiesIncome_input": 57434,
+      "ExemptLandIncome_input": 7860,
+      "Article4_4HouseLandGain_input": 42403,
+      "is_full_year": false,
+      "m_partial": 10
+    },
+    "expected": 0
+  },
+  {
+    "id": 2,
+    "inputs": {
+      "OperatingRevenueTotal_input": 6498661,
+      "SalesReturn_input": 104014,
+      "SalesAllowance_input": 53378,
+      "OperatingCost_input": 2272455,
+      "OperatingExpensesLosses_input": 746851,
+      "NonOperatingRevenueTotal_input": 222367,
+      "NonOperatingLossExpenses_input": 256861,
+      "Prev10LossDeduction_input": 586959,
+      "TaxIncentiveExempt_input": 45103,
+      "ExemptSecuritiesIncome_input": 22070,
+      "ExemptLandIncome_input": 72257,
+      "Article4_4HouseLandGain_input": 29997,
+      "is_full_year": false,
+      "m_partial": 7
+    },
+    "expected": 506216
+  },
+  {
+    "id": 3,
+    "inputs": {
+      "OperatingRevenueTotal_input": 6622433,
+      "SalesReturn_input": 282210,
+      "SalesAllowance_input": 23368,
+      "OperatingCost_input": 4231742,
+      "OperatingExpensesLosses_input": 797182,
+      "NonOperatingRevenueTotal_input": 497861,
+      "NonOperatingLossExpenses_input": 376920,
+      "Prev10LossDeduction_input": 864381,
+      "TaxIncentiveExempt_input": 86567,
+      "ExemptSecuritiesIncome_input": 10320,
+      "ExemptLandIncome_input": 63058,
+      "Article4_4HouseLandGain_input": 45684,
+      "is_full_year": false,
+      "m_partial": 4
+    },
+    "expected": 67772
+  },
+  {
+    "id": 4,
+    "inputs": {
+      "OperatingRevenueTotal_input": 6869053,
+      "SalesReturn_input": 457258,
+      "SalesAllowance_input": 154740,
+      "OperatingCost_input": 1710931,
+      "OperatingExpensesLosses_input": 2207740,
+      "NonOperatingRevenueTotal_input": 9429,
+      "NonOperatingLossExpenses_input": 3887,
+      "Prev10LossDeduction_input": 77891,
+      "TaxIncentiveExempt_input": 46032,
+      "ExemptSecuritiesIncome_input": 60728,
+      "ExemptLandIncome_input": 90842,
+      "Article4_4HouseLandGain_input": 32242,
+      "is_full_year": false,
+      "m_partial": 11
+    },
+    "expected": 407238
+  },
+  {
+    "id": 5,
+    "inputs": {
+      "OperatingRevenueTotal_input": 5664761,
+      "SalesReturn_input": 92941,
+      "SalesAllowance_input": 25260,
+      "OperatingCost_input": 3834422,
+      "OperatingExpensesLosses_input": 1097832,
+      "NonOperatingRevenueTotal_input": 414883,
+      "NonOperatingLossExpenses_input": 485049,
+      "Prev10LossDeduction_input": 59336,
+      "TaxIncentiveExempt_input": 57760,
+      "ExemptSecuritiesIncome_input": 67338,
+      "ExemptLandIncome_input": 82183,
+      "Article4_4HouseLandGain_input": 49439,
+      "is_full_year": false,
+      "m_partial": 10
+    },
+    "expected": 45616
+  },
+  {
+    "id": 6,
+    "inputs": {
+      "OperatingRevenueTotal_input": 8022465,
+      "SalesReturn_input": 36918,
+      "SalesAllowance_input": 128039,
+      "OperatingCost_input": 7091103,
+      "OperatingExpensesLosses_input": 608410,
+      "NonOperatingRevenueTotal_input": 839328,
+      "NonOperatingLossExpenses_input": 67507,
+      "Prev10LossDeduction_input": 711097,
+      "TaxIncentiveExempt_input": 91566,
+      "ExemptSecuritiesIncome_input": 29024,
+      "ExemptLandIncome_input": 45232,
+      "Article4_4HouseLandGain_input": 10621,
+      "is_full_year": false,
+      "m_partial": 1
+    },
+    "expected": 8455
+  },
+  {
+    "id": 7,
+    "inputs": {
+      "OperatingRevenueTotal_input": 4979448,
+      "SalesReturn_input": 354164,
+      "SalesAllowance_input": 190549,
+      "OperatingCost_input": 1746805,
+      "OperatingExpensesLosses_input": 2550742,
+      "NonOperatingRevenueTotal_input": 848648,
+      "NonOperatingLossExpenses_input": 64927,
+      "Prev10LossDeduction_input": 37276,
+      "TaxIncentiveExempt_input": 3315,
+      "ExemptSecuritiesIncome_input": 87746,
+      "ExemptLandIncome_input": 58251,
+      "Article4_4HouseLandGain_input": 49162,
+      "is_full_year": false,
+      "m_partial": 7
+    },
+    "expected": 137031
+  },
+  {
+    "id": 8,
+    "inputs": {
+      "OperatingRevenueTotal_input": 7526535,
+      "SalesReturn_input": 36750,
+      "SalesAllowance_input": 42707,
+      "OperatingCost_input": 3663010,
+      "OperatingExpensesLosses_input": 514314,
+      "NonOperatingRevenueTotal_input": 680763,
+      "NonOperatingLossExpenses_input": 281062,
+      "Prev10LossDeduction_input": 298112,
+      "TaxIncentiveExempt_input": 63324,
+      "ExemptSecuritiesIncome_input": 41337,
+      "ExemptLandIncome_input": 99277,
+      "Article4_4HouseLandGain_input": 39270,
+      "is_full_year": false,
+      "m_partial": 11
+    },
+    "expected": 625626
+  },
+  {
+    "id": 9,
+    "inputs": {
+      "OperatingRevenueTotal_input": 8596111,
+      "SalesReturn_input": 18376,
+      "SalesAllowance_input": 162455,
+      "OperatingCost_input": 2959710,
+      "OperatingExpensesLosses_input": 22699,
+      "NonOperatingRevenueTotal_input": 304762,
+      "NonOperatingLossExpenses_input": 165251,
+      "Prev10LossDeduction_input": 534617,
+      "TaxIncentiveExempt_input": 40727,
+      "ExemptSecuritiesIncome_input": 68705,
+      "ExemptLandIncome_input": 65769,
+      "Article4_4HouseLandGain_input": 31889,
+      "is_full_year": false,
+      "m_partial": 10
+    },
+    "expected": 966135
+  },
+  {
+    "id": 10,
+    "inputs": {
+      "OperatingRevenueTotal_input": 8804160,
+      "SalesReturn_input": 479035,
+      "SalesAllowance_input": 174658,
+      "OperatingCost_input": 1031018,
+      "OperatingExpensesLosses_input": 2259109,
+      "NonOperatingRevenueTotal_input": 47791,
+      "NonOperatingLossExpenses_input": 405501,
+      "Prev10LossDeduction_input": 128220,
+      "TaxIncentiveExempt_input": 63954,
+      "ExemptSecuritiesIncome_input": 40794,
+      "ExemptLandIncome_input": 47694,
+      "Article4_4HouseLandGain_input": 45832,
+      "is_full_year": false,
+      "m_partial": 7
+    },
+    "expected": 835227
+  }
+]

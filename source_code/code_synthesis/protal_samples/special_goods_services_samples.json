@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "inputs": { "type": "勞務", "item_type": "入會權利", "amount": 856780 },
+    "expected": 85678
+  },
+  {
+    "id": 2,
+    "inputs": { "type": "勞務", "item_type": "入會權利", "amount": 1234567 },
+    "expected": 123456
+  },
+  {
+    "id": 3,
+    "inputs": { "type": "勞務", "item_type": "入會權利", "amount": 500123 },
+    "expected": 50012
+  },
+  {
+    "id": 4,
+    "inputs": { "type": "貨物", "item_type": "小客車", "amount": 3856700 },
+    "expected": 385670
+  },
+  {
+    "id": 5,
+    "inputs": { "type": "貨物", "item_type": "遊艇", "amount": 15234560 },
+    "expected": 1523456
+  },
+  {
+    "id": 6,
+    "inputs": { "type": "貨物", "item_type": "飛機/直昇機/超輕型載具", "amount": 9456789 },
+    "expected": 945678
+  },
+  {
+    "id": 7,
+    "inputs": { "type": "貨物", "item_type": "龜殼等", "amount": 678900 },
+    "expected": 67890
+  },
+  {
+    "id": 8,
+    "inputs": { "type": "貨物", "item_type": "家具", "amount": 1234500 },
+    "expected": 123450
+  },
+  {
+    "id": 9,
+    "inputs": { "type": "貨物", "item_type": "小客車", "amount": 12567800 },
+    "expected": 1256780
+  },
+  {
+    "id": 10,
+    "inputs": { "type": "貨物", "item_type": "家具", "amount": 600000 },
+    "expected": 60000
+  }
+]
