@@ -258,10 +258,7 @@ Artifacts related to **methodology: code synthesis layer**:
   A pipeline that generates and repairs tax computation code, using reasoning techniques to ensure accuracy and compliance with legal frameworks.
 
 - **`README.md`**:  
-  A comprehensive guide describing the steps and required dependencies to execute the pipeline, including how to ingest documents, build the Chroma store, and run the code generation pipeline.
-
-- **Metrics Collection**:  
-  Scripts and outputs used for evaluating the effectiveness of the generated tax computation code, including performance metrics and comparison results.
+  A comprehensive guide describing the steps and required dependencies to execute the pipeline, including how to ingest documents, build the Chroma store, and run the code generation pipeline..
 
 This directory is crucial for understanding the **code synthesis methodology** and reproducing the experiments.
 
