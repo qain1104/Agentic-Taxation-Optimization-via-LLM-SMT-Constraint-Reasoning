@@ -65,7 +65,11 @@ DEFAULT_MAX_MISMATCHES = 8                # cap mismatch list shown to LLM
 
 
 # ---------- Schemas / contracts (extend over time) ----------
-SCHEMA_REQUIRED_KEYS: Dict[str, List[str]] = {
+# -----------------------------
+# Schema required keys
+# -----------------------------
+SCHEMA_REQUIRED_KEYS = {
+    # 01 綜所稅（你原本已有）
     "income_tax": [
         "is_married",
         "salary_self",
@@ -80,14 +84,285 @@ SCHEMA_REQUIRED_KEYS: Dict[str, List[str]] = {
         "use_itemized",
         "itemized_deduction",
         "property_loss_deduction",
+        "disability_count",
         "education_count",
         "education_fee",
         "preschool_count",
         "long_term_care_count",
         "rent_deduction",
+    ],
+
+    # 02 外僑所得（依你 calculate_foreigner_income_tax 的 kwargs）
+    "foreign_income_tax": [
+        "days_of_stay",
+        "is_departure",
+        "is_married",
+        "salary_self",
+        "salary_spouse",
+        "salary_dep",
+        "interest_income",
+        "interest_spouse",
+        "interest_dep",
+        "other_income",
+        "other_income_spouse",
+        "other_income_dep",
+        "cnt_under_70",
+        "cnt_over_70",
+        "use_itemized",
+        "itemized_deduction",
+        "property_loss_deduction",
         "disability_count",
-    ]
+        "education_count",
+        "education_fee",
+        "preschool_count",
+        "long_term_care_count",
+        "rent_deduction",
+        # 如果你之後 sample 想帶這些也行（目前 sample 沒用到）
+        "free_vars",
+        "constraints",
+    ],
+
+    # 03 營利事業所得稅（你的 compute_corporate_income_tax_z3 參數）
+    "business_income": [
+        "OperatingRevenueTotal_input",
+        "SalesReturn_input",
+        "SalesAllowance_input",
+        "OperatingCost_input",
+        "OperatingExpensesLosses_input",
+        "NonOperatingRevenueTotal_input",
+        "NonOperatingLossExpenses_input",
+        "Prev10LossDeduction_input",
+        "TaxIncentiveExempt_input",
+        "ExemptSecuritiesIncome_input",
+        "ExemptLandIncome_input",
+        "Article4_4HouseLandGain_input",
+        "is_full_year",
+        "m_partial",
+    ],
+
+    # 04 營業稅（加值型 / 非加值型，sample 兩種會混在同一份 json）
+    "business_tax": [
+        # 加值型
+        "output_tax_val",
+        "input_tax_val",
+        # 非加值型
+        "sales_val",
+        "category",
+    ],
+
+    # 05 貨物稅（固定稅額 + 從價稅）
+    "cargo_tax": [
+        "big_category",
+        "sub_category",
+        "quantity",
+        # 從價稅才需要
+        "assessed_price",
+        "is_electric",
+    ],
+
+    # 06 菸酒稅
+    "ta_tax": [
+        "category",          # '菸' or '酒'
+        "subcategory",       # int
+        "quantity",
+        "alcohol_content",   # 酒類需要，菸類可為 None
+    ],
+
+    # 07 遺產稅（你 estate_tax_z3_solver 參數）
+    "estate": [
+        "death_period",
+        "is_military_police",
+        "land_value",
+        "building_value",
+        "house_value",
+        "deposit_bonds_value",
+        "stock_invest_value",
+        "cash_gold_jewelry_value",
+        "gift_in_2yrs_value",
+        "spouse_count",
+        "lineal_descendant_count",
+        "father_mother_count",
+        "disability_count",
+        "dependent_count",
+        "farmland_val",
+        "inheritance_6to9_val",
+        "unpaid_tax_fines_val",
+        "unpaid_debts_val",
+        "will_management_fee",
+        "public_facility_retention_val",
+        "spouse_surplus_right_val",
+        "gift_tax_offset",
+        "foreign_tax_offset",
+    ],
+
+    # 08 贈與稅（你 gift_tax_calculator 參數）
+    "gift_tax": [
+        "period_choice",
+        "land_value",
+        "ground_value",
+        "house_value",
+        "others_value",
+        "not_included_land",
+        "not_included_house",
+        "not_included_others",
+        "remaining_exemption_98",
+        "previous_gift_sum_in_this_year",
+        "land_increment_tax",
+        "deed_tax",
+        "other_gift_burdens",
+        "previous_gift_tax_or_credit",
+        "new_old_system_adjustment",
+    ],
+
+    # 09 證交稅/期交稅（同一份 sample 會混）
+    "security_futures": [
+        "tax_item",  # 用 tax_item 決定走 securities or futures
+        # securities 會用到：
+        "tp",
+        "ep",
+        "sc",
+        # futures 會用到：
+        "ca",
+        "pa",
+    ],
+
+    # 10 特種貨物及勞務稅（你的 sample 用 type/item_type/amount）
+    "special_goods_services": [
+        "type",       # '貨物' or '勞務'
+        "item_type",  # '小客車' / '入會權利' ...
+        "amount",     # 基礎金額
+    ],
 }
+
+# -----------------------------
+# Keys to show in mismatch table
+# (選 8~16 個最有用的，不要太長)
+# -----------------------------
+SCHEMA_DISPLAY_KEYS = {
+    "income_tax": [
+        "is_married",
+        "salary_self",
+        "salary_spouse",
+        "salary_dep",
+        "interest_income",
+        "stock_dividend",
+        "house_transaction_gain",
+        "other_income",
+        "cnt_under_70",
+        "cnt_over_70",
+        "use_itemized",
+        "itemized_deduction",
+        "property_loss_deduction",
+        "disability_count",
+        "long_term_care_count",
+        "rent_deduction",
+    ],
+    "foreign_income_tax": [
+        "days_of_stay",
+        "is_departure",
+        "is_married",
+        "salary_self",
+        "salary_spouse",
+        "salary_dep",
+        "interest_income",
+        "interest_spouse",
+        "interest_dep",
+        "other_income",
+        "other_income_spouse",
+        "other_income_dep",
+        "cnt_under_70",
+        "cnt_over_70",
+        "use_itemized",
+        "property_loss_deduction",
+    ],
+    "business_income": [
+        "OperatingRevenueTotal_input",
+        "SalesReturn_input",
+        "SalesAllowance_input",
+        "OperatingCost_input",
+        "OperatingExpensesLosses_input",
+        "NonOperatingRevenueTotal_input",
+        "NonOperatingLossExpenses_input",
+        "Prev10LossDeduction_input",
+        "TaxIncentiveExempt_input",
+        "ExemptSecuritiesIncome_input",
+        "ExemptLandIncome_input",
+        "Article4_4HouseLandGain_input",
+        "is_full_year",
+        "m_partial",
+    ],
+    "business_tax": [
+        "output_tax_val",
+        "input_tax_val",
+        "sales_val",
+        "category",
+    ],
+    "cargo_tax": [
+        "big_category",
+        "sub_category",
+        "quantity",
+        "assessed_price",
+        "is_electric",
+    ],
+    "ta_tax": [
+        "category",
+        "subcategory",
+        "quantity",
+        "alcohol_content",
+    ],
+    "estate": [
+        "death_period",
+        "is_military_police",
+        "land_value",
+        "building_value",
+        "house_value",
+        "deposit_bonds_value",
+        "stock_invest_value",
+        "gift_in_2yrs_value",
+        "spouse_count",
+        "lineal_descendant_count",
+        "father_mother_count",
+        "disability_count",
+        "dependent_count",
+        "unpaid_debts_val",
+        "spouse_surplus_right_val",
+        "gift_tax_offset",
+    ],
+    "gift_tax": [
+        "period_choice",
+        "land_value",
+        "ground_value",
+        "house_value",
+        "others_value",
+        "previous_gift_sum_in_this_year",
+        "remaining_exemption_98",
+        "land_increment_tax",
+        "deed_tax",
+        "other_gift_burdens",
+        "previous_gift_tax_or_credit",
+        "new_old_system_adjustment",
+    ],
+    "security_futures": [
+        "tax_item",
+        "tp",
+        "ep",
+        "sc",
+        "ca",
+        "pa",
+    ],
+    "special_goods_services": [
+        "type",
+        "item_type",
+        "amount",
+    ],
+}
+
+def get_mismatch_table_keys(schema: str) -> list[str]:
+    # 你原本的 income_tax 特例可以直接拿掉，統一走這裡
+    if schema in SCHEMA_DISPLAY_KEYS:
+        return SCHEMA_DISPLAY_KEYS[schema]
+    return SCHEMA_REQUIRED_KEYS.get(schema, [])[:16]
+
 
 
 DEFAULT_CODE_CONTRACT = """
@@ -455,34 +730,6 @@ def format_mismatch_table(mismatches: List[Dict[str, Any]], *, keys: List[str]) 
     return "\n".join(lines)
 
 
-def get_mismatch_table_keys(schema: str) -> List[str]:
-    # 盡量短，但能定位：婚姻/扶養/扣除額/所得類型/人數
-    if schema == "income_tax":
-        return [
-            "is_married",
-            "cnt_under_70",
-            "cnt_over_70",
-            "use_itemized",
-            "itemized_deduction",
-            "rent_deduction",
-            "long_term_care_count",
-            "preschool_count",
-            "disability_count",
-            "education_count",
-            "education_fee",
-            "property_loss_deduction",
-            "interest_income",
-            "stock_dividend",
-            "house_transaction_gain",
-            "other_income",
-            "salary_self",
-            "salary_spouse",
-            "salary_dep",
-        ]
-    # fallback：若其他 schema 就抓 required keys（最多 16 個避免 prompt 太長）
-    return (SCHEMA_REQUIRED_KEYS.get(schema, []) or [])[:16]
-
-
 # ============== LLM calls (Responses API streaming) ==============
 def _event_get(ev: Any, key: str, default: Any = None) -> Any:
     if hasattr(ev, key):
@@ -637,6 +884,146 @@ async def llm_generate_code(
     raise RuntimeError(f"llm_generate_code failed after retries: {last_exc}")
 
 
+def responses_generate_text_streaming(
+    *,
+    prompt: str,
+    model: str,
+    reasoning_effort: str,
+    verbosity: str,
+    stream_to_stdout: bool,
+    trace: TraceLogger,
+    tag: str,
+    enable_web_search: bool = False,
+    web_allowed_domains: Optional[List[str]] = None,
+) -> str:
+    client = OpenAI()
+    trace.emit(
+        "llm.start",
+        tag=tag,
+        model=model,
+        reasoning_effort=reasoning_effort,
+        verbosity=verbosity,
+        web_search=enable_web_search,
+        msg=f"[LLM:{tag}] start model={model} (reasoning={reasoning_effort}, verbosity={verbosity}, web_search={enable_web_search})",
+    )
+
+    tools = None
+    if enable_web_search:
+        tool: Dict[str, Any] = {"type": "web_search"}
+        if web_allowed_domains:
+            tool["filters"] = {"allowed_domains": web_allowed_domains}
+        tools = [tool]
+
+    buf: List[str] = []
+    completed = False
+
+    try:
+        stream = client.responses.create(
+            model=model,
+            input=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a debugging assistant. Output ONLY a concise diagnostic note in Traditional Chinese. "
+                        "No code. No markdown. No step-by-step chain-of-thought. "
+                        "Use bullet points and keep it under 12 lines."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            tools=tools,
+            stream=True,
+            reasoning={"effort": reasoning_effort},
+            text={"verbosity": verbosity},
+        )
+
+        if stream_to_stdout:
+            print("", flush=True)
+
+        for ev in stream:
+            etype = _event_get(ev, "type", "")
+            if etype == "response.output_text.delta":
+                delta = _event_get(ev, "delta", "")
+                if delta:
+                    buf.append(delta)
+                    if stream_to_stdout:
+                        sys.stdout.write(delta)
+                        sys.stdout.flush()
+            elif etype in ("response.completed", "response.output_text.done", "response.done"):
+                completed = True
+                break
+            elif etype in ("response.failed", "response.incomplete", "error"):
+                err_msg = _event_get(ev, "error", None) or _event_get(ev, "message", None) or str(ev)
+                raise TransientLLMError(f"stream ended with {etype}: {err_msg}")
+            else:
+                continue
+
+    except Exception as e:
+        if type(e).__name__ in {"BadRequestError", "AuthenticationError", "PermissionDeniedError"}:
+            raise
+        raise TransientLLMError(str(e)) from e
+
+    if stream_to_stdout:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+    out = sanitize_llm_text("".join(buf))
+    if (not completed) or (not out.strip()):
+        raise TransientLLMError("stream did not complete cleanly (empty or incomplete output)")
+
+    trace.emit("llm.done", tag=tag, model=model, out_chars=len(out), msg=f"[LLM:{tag}] done (chars={len(out)})")
+    return out
+
+
+async def llm_generate_text(
+    *,
+    prompt: str,
+    model: str,
+    reasoning_effort: str,
+    verbosity: str,
+    stream_to_stdout: bool,
+    trace: TraceLogger,
+    tag: str,
+    enable_web_search: bool = False,
+    web_allowed_domains: Optional[List[str]] = None,
+) -> str:
+    max_retries = 5
+    backoff = 1.0
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            return await asyncio.to_thread(
+                responses_generate_text_streaming,
+                prompt=prompt,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                verbosity=verbosity,
+                stream_to_stdout=stream_to_stdout,
+                trace=trace,
+                tag=tag,
+                enable_web_search=enable_web_search,
+                web_allowed_domains=web_allowed_domains,
+            )
+        except BaseException as e:
+            retryable = isinstance(e, TransientLLMError)
+            if (not retryable) or attempt == max_retries:
+                raise
+            trace.emit(
+                "llm.retry",
+                tag=tag,
+                model=model,
+                attempt=attempt,
+                max_retries=max_retries,
+                backoff=round(backoff, 3),
+                err_type=type(e).__name__,
+                err=str(e),
+                msg=f"[LLM:{tag}] retry {attempt}/{max_retries} after {backoff:.1f}s ({type(e).__name__}: {e})",
+            )
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2.0, 8.0)
+
+
+
 @dataclass
 class PipelineResult:
     code: str
@@ -708,36 +1095,38 @@ def run_probes_table(
     schema: str,
     max_probes: int,
 ) -> str:
+    """
+    Solver-only probes (no oracle available).
+    Show how solver output changes when toggling one factor.
+    """
     if schema != "income_tax":
         return "(Probes 未實作於此 schema)"
 
     base_ok, base_got, base_err = run_generated_solver_once(code_text, base_inputs)
-    base_got_i = int(base_got) if (base_ok and base_got is not None) else None
+    if not base_ok or base_got is None:
+        err1 = (base_err.splitlines()[0] if base_err else "solver_error").strip()
+        return f"(BASE solver 執行失敗，無法產生 probes：{err1})"
+
+    base_got_i = int(base_got)
 
     probes = build_income_tax_probes(base_inputs)[:max_probes]
 
     rows: List[str] = []
-    rows.append("probe | oracle_tax | solver_tax | oracle_delta | solver_delta | note")
-    rows.append("---|---:|---:|---:|---:|---")
+    rows.append("probe | solver_tax | solver_delta | note")
+    rows.append("---|---:|---:|---")
 
     for label, variant in probes:
         ok, got, err = run_generated_solver_once(code_text, variant)
         if ok and got is not None:
             s = int(got)
-            od = o - base_oracle
-            sd = (s - base_got_i) if base_got_i is not None else 0
-            rows.append(f"{label} | {s} | {od:+d} | {sd:+d} | ")
+            sd = s - base_got_i
+            rows.append(f"{label} | {s} | {sd:+d} | ")
         else:
             err1 = (err.splitlines()[0] if err else "solver_error").strip()
-            od = o - base_oracle
-            rows.append(f"{label} | ERR | {od:+d} | ERR | {err1}")
+            rows.append(f"{label} | ERR | ERR | {err1}")
 
-    base_line = (
-        f"BASE | {base_oracle} | {base_got_i if base_got_i is not None else 'ERR'} | +0 | +0 | "
-        f"{('' if base_ok else (base_err.splitlines()[0] if base_err else ''))}"
-    )
+    base_line = f"BASE | {base_got_i} | +0 | "
     return "\n".join([base_line, ""] + rows).strip()
-
 
 # ============== Prompt builders ==============
 def build_repair_prompt(
@@ -831,6 +1220,54 @@ got={got}
 【你上一版的程式碼】
 {prev_code}
 """.strip()
+
+
+def build_diagnosis_prompt(
+    *,
+    schema: str,
+    fail_type: str,
+    error_report: str,
+    failing_inputs: Dict[str, Any],
+    expected: Optional[int],
+    got: Optional[int],
+    mismatch_table: str,
+    probes_table: str,
+    patch_notes: str,
+) -> str:
+    return f"""
+你在協助我 debug 一個「用 Z3 寫的稅法 compute_tax(**kwargs)->int」產生器。
+現在本地端驗證失敗，請你用「最可能的根因」角度寫一份簡短診斷（不要寫逐步推理、不要寫 code）。
+
+【schema】{schema}
+【fail_type】{fail_type}
+
+【錯誤/不吻合摘要】
+{error_report}
+
+【Failing inputs】
+{json.dumps(failing_inputs or {}, ensure_ascii=False)}
+
+【Expected vs Got】
+expected={expected}
+got={got}
+
+【Mismatch Table（若有）】
+{mismatch_table or "(無)"}
+
+【Solver-only Probes（若有）】
+{probes_table or "(無)"}
+
+【上一版 PATCH_NOTES（若有）】
+{patch_notes or "(無)"}
+
+輸出格式（請照做，<=12 行）：
+- 最可能錯的模組/段落：...
+- 為什麼：...（1~2 句）
+- 優先檢查的規則/門檻/上限：...（列 2~4 點）
+- 建議修正方向：...（列 1~3 點）
+""".strip()
+
+
 
 
 def read_text_files_line_numbered(paths: List[str]) -> str:
@@ -1007,6 +1444,7 @@ async def synthesize_with_auto_repair(
     last_error = ""
     attempt = 0
     sig_counts: Dict[str, int] = {}
+    repair_count = 0  # number of repairs performed (excluding initial codegen)
 
     while True:
         attempt += 1
@@ -1082,6 +1520,61 @@ async def synthesize_with_auto_repair(
 
         last_error = report
         (run_dir / f"round_{attempt}_fail_report.txt").write_text(report, encoding="utf-8")
+        fail_type = classify_failure(report)
+
+        # ---- Diagnosis log (LLM猜最可能哪裡錯) ----
+        try:
+            patch_notes_prev = extract_patch_notes(code)
+            diag_prompt = build_diagnosis_prompt(
+                schema=schema,
+                fail_type=fail_type,
+                error_report=report,
+                failing_inputs=failing_inputs,
+                expected=expected,
+                got=got,
+                mismatch_table=mismatch_table,
+                probes_table=probes_table if 'probes_table' in locals() else "",
+                patch_notes=patch_notes_prev,
+            )
+
+            diagnosis = await llm_generate_text(
+                prompt=diag_prompt,
+                model=repair_model,                 # 你也可以改成 selected_model
+                reasoning_effort=reasoning_repair,  # 或 selected_reasoning
+                verbosity="low",
+                stream_to_stdout=False,
+                trace=trace,
+                tag=f"diagnosis_{attempt}",
+                enable_web_search=enable_web_search,
+                web_allowed_domains=web_allowed_domains,
+            )
+            (run_dir / f"diagnosis_{attempt}.txt").write_text(diagnosis.strip() + "\n", encoding="utf-8")
+            trace.emit("diagnosis.saved", attempt=attempt, msg=f"[DIAG] saved diagnosis_{attempt}.txt")
+        except Exception as e:
+            trace.emit("diagnosis.error", attempt=attempt, err=str(e), msg=f"[DIAG] failed: {type(e).__name__}: {e}")
+
+        # ---- stop condition: max repair attempts ----
+        # Stop BEFORE generating a new repair when repair_count hits the limit.
+        # This guarantees the last generated repair (if any) will always be verified.
+        if max_attempts and repair_count >= max_attempts:
+            total_elapsed = time.perf_counter() - t0
+            trace.emit(
+                "stop",
+                rounds=attempt,
+                repairs=repair_count,
+                total_seconds=round(total_elapsed, 3),
+                reason="max_repairs_reached",
+                msg=f"[STOP] max repair attempts reached ({max_attempts}). last_error saved.",
+            )
+            trace.close()
+            return PipelineResult(
+                code=code,
+                rounds=attempt,
+                ok=False,
+                last_error=last_error,
+                total_seconds=total_elapsed,
+                run_dir=str(run_dir),
+            )
 
         fail_type = classify_failure(report)
 
@@ -1160,6 +1653,8 @@ async def synthesize_with_auto_repair(
         (run_dir / f"prompt_repair_{attempt}.txt").write_text(repair_prompt, encoding="utf-8")
 
         # ---- repair (web_search default ON too) ----
+        repair_count += 1
+        trace.emit("repair.count", attempt=attempt, repairs=repair_count, msg=f"[REPAIR COUNT] {repair_count}/{max_attempts or '∞'}")
         code = await llm_generate_code(
             prompt=repair_prompt,
             model=selected_model,
@@ -1182,19 +1677,6 @@ async def synthesize_with_auto_repair(
             head = "\n".join(code.splitlines()[:show_llm_head])
             print(f"[LLM:repair_{attempt}] HEAD({show_llm_head}):\n{head}\n", flush=True)
 
-        if max_attempts and attempt >= max_attempts:
-            total_elapsed = time.perf_counter() - t0
-            trace.emit(
-                "stop",
-                rounds=attempt,
-                total_seconds=round(total_elapsed, 3),
-                reason="max_attempts_reached",
-                msg=f"[STOP] max_attempts reached ({max_attempts}). last_error saved.",
-            )
-            trace.close()
-            return PipelineResult(code=code, rounds=attempt, ok=False, last_error=last_error, total_seconds=total_elapsed, run_dir=str(run_dir))
-
-
 # ============== CLI ==============
 async def _amain() -> None:
     parser = argparse.ArgumentParser(description="Tax SMT agent (RAG + OpenAI + local exec + auto repair + traces).")
@@ -1204,7 +1686,7 @@ async def _amain() -> None:
     parser.add_argument("--collection", default="tax_laws", help="Chroma collection name.")
     parser.add_argument("--k", type=int, default=15, help="Top-k clauses to retrieve.")
     parser.add_argument("--out", default="generated_tax_solver.py", help="Where to write the final generated solver code.")
-    parser.add_argument("--max-attempts", type=int, default=0, help="Max codegen+repair attempts. 0 = unlimited.")
+    parser.add_argument("--max-attempts", type=int, default=0, help="Max repair attempts (excluding initial codegen). 0 = unlimited.")
 
     parser.add_argument("--stream-llm", action="store_true", help="Stream LLM output to console.")
     parser.add_argument("--quiet", action="store_true", help="Less console output (still writes trace.jsonl).")

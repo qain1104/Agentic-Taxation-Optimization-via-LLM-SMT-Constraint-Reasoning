@@ -274,16 +274,6 @@ Artifacts related to **RQ2: Generalization to Unseen Inputs / Constraint Code Ac
 - Scripts to run Monte-Carlo validation by comparing our synthesized SMT solvers against the official MoF eTax calculators on large batches of unseen cases per regime.
 - Collected mismatch logs (if any), per-regime accuracy summaries, and scripts to regenerate the accuracy numbers reported in the paper (solver = 100% vs GPT-5-level prompt-only baseline).
 - A dedicated `source_code/selenium_test_records/Readme.md` describing the exact commands to reproduce the RQ2 experiments.
-
-### `rq3/`
-
-Artifacts related to **RQ3: Optimizing Real-World Tax Decisions**:
-
-- The 20 natural-language tax-planning tasks across ten Taiwanese tax regimes used in the paper (e.g., minimizing consolidated income tax under constraints, maximizing purchasable quantity under a tax cap).
-- Prompt templates and evaluation harnesses that translate NL tasks into our symbolic optimization calls (LLM + Z3 Optimize) and into the GPT-5-level baseline with Chain-of-Thought and browsing.
-- Result files with per-task optimality and latency measurements, plus scripts to recompute the summary table comparing our system against the LLM baseline.
-- A dedicated `rq3/README.md` describing how to run both systems and reproduce the RQ3 results end-to-end.
-
 ---
 
 ## Requirements
