@@ -373,7 +373,7 @@ This directory contains the implementation of the agentic tax optimization servi
 
 # `source_code/code_synthesis`
 
-Artifacts related to **methodology: code synthesis layer**:
+Artifacts related to **methodology: code synthesis layer** and **RQ1**:
 
 - **Legal Clause Retrieval & Tax Code Generation**:  
   This directory contains the core functionality for retrieving tax law clauses from a Chroma vector store and synthesizing tax code based on the retrieved clauses using advanced LLMs.
