@@ -210,6 +210,9 @@ This directory contains the implementation of the agentic tax optimization servi
   - Frontends such as:
     - `app_gradio.py` — Gradio UI (interactive demo).
   - Integrations in `agents/integrations/` (e.g., FIN backend webhook).
+  - For the convenience of non-Chinese speakers, we have provided English versions of our documentation. - - Please refer to: 
+    - multi_agent_tax_system_en.py and app_gradio_en.py to understand the implementation of the agentic service. 
+    - Note that the original Chinese version remains the recommended standard for actual testing and operation.
 
 - `tax_calculators/`  
   - Per-tax-type calculators, each with its own generated Z3 SMT constraint modules, e.g.:
