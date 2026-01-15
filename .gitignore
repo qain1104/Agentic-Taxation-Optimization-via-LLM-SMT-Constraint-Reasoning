@@ -19,3 +19,4 @@ source_code/code_synthesis/generated_tax_solver.py
 
 # Env
 .env
+generated_tax_solver.py
