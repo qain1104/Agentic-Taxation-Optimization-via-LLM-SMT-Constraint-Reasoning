@@ -173,6 +173,73 @@ def _route_by_keywords(text: str) -> str | None:
         if rx.search(t):
             return tool
     return None
+# === Fin report upload (Path A: user explicitly types 'Finalize report' / 'Export') ===
+# English-only triggers (case-insensitive)
+_EXPORT_CMD_RE = re.compile(
+    r"^(?:finalize(?:\s+report)?|export|submit\s+report|send\s+report)$",
+    re.I
+)
+
+def _build_export_title(mem: MemoryStore | None = None) -> str:
+    """Build a human-readable title: {tool}-{mode}-{YYYYMMDD-HHMMSS}."""
+    store = mem or MEMORY
+    try:
+        tool = store.get("last_tool") or "unknown"
+        desc = (TOOL_MAP.get(tool, {}) or {}).get("description", tool)
+    except Exception:
+        desc = "tax-report"
+    try:
+        mode = store.get("op") or "minimize"
+    except Exception:
+        mode = "minimize"
+    return f"{desc}-{mode}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+async def _trigger_fin_export(mem: MemoryStore | None = None):
+    """
+    Pull the latest report (from the given MemoryStore or global MEMORY) and send it to the Fin backend.
+    Adds basic debug info before/after sending.
+    """
+    from agents.integrations.fintax_api import get_latest_report, send_final_report
+
+    store = mem or MEMORY
+    try:
+        report = get_latest_report(memory=store)
+        if not (report.get("md") and isinstance(report["md"], str) and report["md"].strip()):
+            # fallback: global / disk
+            report = get_latest_report(memory=None)
+
+        md = report.get("md")
+        if not (isinstance(md, str) and md.strip()):
+            raise RuntimeError("No latest report found (md is empty). Please complete at least one computation first.")
+
+        # ==== pre-send debug ====
+        md_sha = hashlib.sha256(md.encode("utf-8")).hexdigest()[:12]
+        md_len = len(md)
+        json_keys = len((report.get("json") or {}) if isinstance(report.get("json"), dict) else {})
+
+        _append_debug(store, "[TRIGGER] about to send:", {"title": report.get("title"), "md_len": md_len, "md_sha": md_sha, "json_keys": json_keys})
+
+        # also keep a short line for UIs that show debug_lines
+        try:
+            dbg_lines = store.get("debug_lines") or []
+            dbg_lines.append(f"[TRIGGER] title={report.get('title')} md_len={md_len} md_sha={md_sha} json_keys={json_keys}")
+            store.set("debug_lines", dbg_lines)
+        except Exception:
+            pass
+
+        info = await send_final_report(
+            title=report.get("title") or _build_export_title(store),
+            markdown=md,
+            raw_json=report.get("json") or {},
+        )
+
+        _append_debug(store, "[TRIGGER] sent to Fin:", info)
+        return info
+
+    except Exception as e:
+        _append_debug(store, "[TRIGGER] export failed:", str(e))
+        raise
+
 # ---------------------------------------------------------------------------
 # Public pipeline entry for REST API (/run)
 # ---------------------------------------------------------------------------
@@ -651,8 +718,8 @@ class CallerAgent(BaseAgent):
             slots.pop("rows", None)
 
     def _coerce_boolean_fields(self, slots: Dict[str, Any], bool_fields: Optional[set] = None) -> None:
-        true_set = {"true", "t", "yes", "y", "1", "是", "有"}
-        false_set = {"false", "f", "no", "n", "0", "否", "沒有", "無"}
+        true_set = {"true", "t", "yes", "y", "1"}
+        false_set = {"false", "f", "no", "n", "0"}
         for k, v in list(slots.items()):
             if bool_fields is not None:
                 if k not in bool_fields: continue
@@ -913,7 +980,7 @@ class CallerAgent(BaseAgent):
             lab_tokens = [str(v) for v in labels.values() if isinstance(v, str)]
             extra = " ".join(lab_tokens[:20])
             mode_hint = f" 模式:{op}" if op else ""
-            return f"{tool_name} 條件 建議 稅務 {mode_hint} {user_msg} {extra}"
+            return f"{tool_name} constraints advice tax {mode_hint} {user_msg} {extra}"
 
         sources = []
         if db:
@@ -922,7 +989,7 @@ class CallerAgent(BaseAgent):
                 hits = db.similarity_search(q, k=6)
                 for h in (hits or []):
                     page = (h.metadata or {}).get("page") or (h.metadata or {}).get("loc")
-                    title = (h.metadata or {}).get("title") or (h.metadata or {}).get("source") or "手冊"
+                    title = (h.metadata or {}).get("title") or (h.metadata or {}).get("source") or "Handbook"
                     url = (h.metadata or {}).get("url")
                     txt = str(h.page_content or "").strip().replace("\n", " ")
                     if len(txt) > 320: txt = txt[:320] + "…"
@@ -1142,6 +1209,28 @@ class CallerAgent(BaseAgent):
     async def handle(self, user_msg: str) -> Dict[str, Any]:
         def _is_next_local(s: str) -> bool:
             return bool(re.search(r"^(?:next step|next|go|continue|ok)$", (s or "").strip(), flags=re.I))
+        # -1) Export command: finalize / export / submit report / send report
+        try:
+            if _EXPORT_CMD_RE.search((user_msg or "").strip()):
+                _append_debug(self.memory, "[CallerAgent] Detected export command.")
+                info = await _trigger_fin_export(self.memory)
+                title = info.get("title") if isinstance(info, dict) else None
+                return {
+                    "type": "follow_up",
+                    "stage": "export",
+                    "question": (
+                        "Report submitted to the Fin backend (async)."
+                        + (f" Title: {title}." if title else "")
+                        + "\n\nIf you want to keep iterating, just type new constraints or a new request. "
+                          "To re-send, type 'Finalize report' again."
+                    ),
+                }
+        except Exception as e:
+            return {
+                "type": "follow_up",
+                "stage": "export_error",
+                "question": f"Export failed: {e}",
+            }
 
         # —— 0) 若使用者要「再加條件 / 繼續加 / 補幾個條件」→ 直接交給 ConstraintAgent 重開上一輪 —— 
         try:
@@ -1503,199 +1592,143 @@ class ConstraintAgent(BaseAgent):
                 dst[op] = val
 
     # === C. 參數與條件「中文預覽」 ===
-    def _fmt_params_preview(self, tool_name: str, payload: Dict[str, Any],
-                            *, mask_free_and_constrained: bool = False) -> str:
-        """顯示：稅種＋目前系統接收到的參數（含摘要）"""
+    def _fmt_params_preview(self, tool_name: str, payload: Dict[str, Any]) -> str:
+        """Show: tax type + the current parameters the system has received (with a compact overview)."""
         meta = TOOL_MAP.get(tool_name, {}) or {}
         labels: Dict[str, str] = meta.get("field_labels", {}) or {}
-        row_fields = list(meta.get("row_fields", []) or [])
+        row_fields: List[str] = list(meta.get("row_fields") or [])
         desc = meta.get("description", tool_name)
+        user_params = (payload.get("user_params") or {}) if isinstance(payload, dict) else {}
+        free = set((user_params.get("free_vars") or []) if isinstance(user_params.get("free_vars"), list) else [])
+        cons = user_params.get("constraints") or {}
+        cons_set = set()
+        try:
+            for k in (cons or {}).keys():
+                if isinstance(k, str):
+                    cons_set.add(k)
+        except Exception:
+            pass
 
         def _lab(k: str) -> str:
             s = labels.get(k, k)
-            if not isinstance(s, str):
-                return k
-            s = re.sub(r"[（(].*?[）)]", "", s).replace("？", "").strip()
-            return s or k
+            return s if isinstance(s, str) and s.strip() else k
 
         def _fmt_money(x):
             try:
-                f = float(x)
-                return f"{f:,.0f}" if f.is_integer() else f"{f:,}"
+                if isinstance(x, bool):
+                    return "yes" if x else "no"
+                if isinstance(x, (int, float)):
+                    if abs(float(x)) >= 1000:
+                        return f"{float(x):,.0f}"
+                    return str(x)
+                return str(x)
             except Exception:
                 return str(x)
 
-        user_params = (payload.get("user_params") or {}) if isinstance(payload, dict) else {}
-
-        # ——— Stage 3 專用：若變數已在 free_vars 或出現在約束中，遮蔽為「由求解器決定」 ———
-        free_set: set[str] = set()
-        cons_set: set[str] = set()
-        if mask_free_and_constrained:
-            fv_raw = user_params.get("free_vars") or []
-            if isinstance(fv_raw, list):
-                for t in fv_raw:
-                    try:
-                        s = str(t).strip()
-                        if not s:
-                            continue
-                        # 只排除真正的 row 變數（例如 row1.quantity），其他像 cigar_new.quantity 要保留
-                        if re.match(r"^row\d+\.", s):
-                            continue
-                        free_set.add(s)
-                    except Exception:
-                        pass
-            cons_raw = user_params.get("constraints") or {}
-            basics_keys = {k for k in user_params.keys() if k not in ("rows","constraints","free_vars")}
-            if isinstance(cons_raw, dict) and basics_keys:
-                try:
-                    alt = "|".join(map(re.escape, basics_keys))
-                    rx = re.compile(rf"\b({alt})\b")
-                    for lhs in cons_raw.keys():
-                        if not isinstance(lhs, str): continue
-                        for m in rx.finditer(lhs):
-                            cons_set.add(m.group(1))
-                except Exception:
-                    pass
-
-        lines = [f"### Tax type:{desc}", "**Current variables(overview)**"]
-        basics = [(k, v) for k, v in user_params.items() if k != "rows" and k not in ("free_vars", "constraints")]
+        lines = [f"### Tax type: {desc}", "**Current parameters (overview)**"]
+        basics = [(k, v) for k, v in user_params.items() if k != "rows" and k not in ("free_vars", "constraints", "row_aliases")]
         for k, v in basics:
             if v in (None, ""):
                 continue
-            vv = ("yes" if v else "no") if isinstance(v, bool) else ("Determined by the solver（free）" if k in free_set else ("Determined by the solver（constrained）" if k in cons_set else _fmt_money(v)))
- 
-            lines.append(f"- {_lab(k)}：{vv}（`{k}`）")
-        return "\n".join(lines)
+            if isinstance(v, bool):
+                vv = "yes" if v else "no"
+            else:
+                vv = "free variable (solver-controlled)" if k in free else ("solver-controlled (constrained)" if k in cons_set else _fmt_money(v))
+            lines.append(f"- {_lab(k)}: {vv} (`{k}`)")
 
-    def _fmt_constraints_preview_zh(self, tool_name: str, payload: Dict[str, Any]) -> str:
-        """
-        以中文顯示 free_vars 與 constraints（含 slug.field 與 'slug field' 兩種寫法、以及 row{i}.field）：
-        - 例如：cement_white quantity + cement_portland_I quantity >= 1200
-            → 白水泥- 數量 + 卜特蘭I型水泥- 數量 >= 1200
-        - row 變數會顯示成「第 N 筆 的『欄位』」或用品項名稱別名。
-        """
-        meta = TOOL_MAP.get(tool_name, {}) or {}
-        labels: Dict[str, str] = meta.get("field_labels", {}) or {}
-        user_params = (payload.get("user_params") or {}) if isinstance(payload, dict) else {}
         rows = user_params.get("rows") or []
-
-        # 蒐集 row 別名（優先：payload.row_aliases / user_params.row_aliases → 其次：rows 名稱）
-        row_aliases: Dict[str, str] = {}
-        if isinstance(payload.get("row_aliases"), dict):
-            for k, v in payload["row_aliases"].items():
-                if isinstance(k, str) and isinstance(v, str) and v.startswith("row"):
-                    row_aliases[v] = k
-        if isinstance(user_params.get("row_aliases"), dict):
-            for k, v in user_params["row_aliases"].items():
-                if isinstance(k, str) and isinstance(v, str) and v.startswith("row"):
-                    row_aliases[v] = k
-        if isinstance(rows, list):
-            name_keys = ("main_name", "sub_name", "tax_item", "name", "item", "category")
-            for i, r in enumerate(rows):
+        if isinstance(rows, list) and rows:
+            lines.append("")
+            lines.append("**Items (rows) summary**")
+            for i, r in enumerate(rows, start=1):
                 if not isinstance(r, dict):
                     continue
                 nm = None
-                for nk in name_keys:
-                    v = r.get(nk)
-                    if isinstance(v, str) and v.strip():
-                        nm = v.strip()
+                for key in ("main_name", "sub_name", "tax_item", "name", "item", "category"):
+                    vv = r.get(key)
+                    if isinstance(vv, str) and vv.strip():
+                        nm = vv.strip()
                         break
-                row_aliases.setdefault(f"row{i}", nm or f"第 {i+1} 筆")
+                nm = nm or f"Item {i}"
+                pairs = []
+                pick_fields = row_fields[:6] if row_fields else list(r.keys())[:6]
+                for f in pick_fields:
+                    if r.get(f) not in (None, ""):
+                        pairs.append(f"{f}={_fmt_money(r[f])}")
+                lines.append(f"- {nm}" + (" | " + "; ".join(pairs) if pairs else ""))
+
+        return "\n".join(lines)
+
+    def _fmt_constraints_preview_zh(self, tool_name: str, payload: Dict[str, Any]) -> str:
+        """Render current free_vars and constraints in a readable (English) form, including row{i}.field."""
+        meta = TOOL_MAP.get(tool_name, {}) or {}
+        labels: Dict[str, str] = meta.get("field_labels", {}) or {}
+        row_fields: List[str] = list(meta.get("row_fields") or [])
+        user_params = (payload.get("user_params") or {}) if isinstance(payload, dict) else {}
+        rows = user_params.get("rows") or []
+        nrows = len(rows) if isinstance(rows, list) else 0
+
+        name_keys = ("item", "main_name", "sub_name", "category", "name", "tax_item")
+        row_aliases: Dict[str, str] = {}
+        if nrows:
+            for i, r in enumerate(rows):
+                nm = None
+                if isinstance(r, dict):
+                    for nk in name_keys:
+                        v = r.get(nk)
+                        if isinstance(v, str) and v.strip():
+                            nm = v.strip()
+                            break
+                row_aliases[f"row{i}"] = nm or f"Item {i+1}"
 
         def _lab(k: str) -> str:
             s = labels.get(k, k)
-            if not isinstance(s, str):
+            if not isinstance(s, str) or not s.strip():
                 return k
-            s = re.sub(r"[（(].*?[）)]", "", s).replace("？", "").strip()
+            s = re.sub(r"[\(（].*?[\)）]", "", s).strip()
             return s or k
 
-        def _fmt_num(x) -> str:
-            if isinstance(x, (int, float)):
-                return str(int(x)) if (not isinstance(x, float) or abs(x - int(x)) <= 1e-9) else str(x)
-            try:
-                xs = str(x).strip()
-                if re.match(r"^[0-9]+(?:\.[0-9]+)?$", xs.replace(",", "")):
-                    return xs[:-2] if xs.endswith(".0") else xs
-            except Exception:
-                pass
-            return str(x)
-        
-        def _humanize_slug_field(expr: str) -> str:
-            fields = sorted(field_set_for_tool(tool_name), key=len, reverse=True)
-            if not fields:
-                return str(expr or "")
+        def _pretty_tok(tok: str) -> str:
+            m = re.match(r"^row(\d+)\.([A-Za-z_][A-Za-z0-9_]*)$", tok)
+            if m:
+                idx = int(m.group(1))
+                fld = m.group(2)
+                name = row_aliases.get(f"row{idx}") or f"Item {idx+1}"
+                fld_lab = _lab(fld) if fld in row_fields else fld
+                return f"{name} — {fld_lab} (`{tok}`)"
+            return f"{_lab(tok)} (`{tok}`)"
 
-            fld_alt = "|".join(map(re.escape, fields))
-            token_re = re.compile(
-                rf"(?P<slug>[A-Za-z0-9_]+)\.(?P<field>{fld_alt})|(?P<slug2>[A-Za-z0-9_]+)\s+(?P<field2>{fld_alt})"
-            )
-
-            def _repl(m):
-                if m.group("slug") and m.group("field"):
-                    key = f"{m.group('slug')}.{m.group('field')}"
-                else:
-                    key = f"{m.group('slug2')}.{m.group('field2')}"
-                return labels.get(key, key)
-
-            s = token_re.sub(_repl, str(expr or ""))
-
-            # ② 也把「裸變數鍵」換成中文（例如 salary_self → 本人薪資所得）
-            try:
-                single_vars = [k for k in labels.keys()
-                               if isinstance(k, str)
-                               and "." not in k
-                               and re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k)]
-                if single_vars:
-                    sv_alt = "|".join(map(re.escape, single_vars))
-                    bare_re = re.compile(rf"\b({sv_alt})\b")
-                    s = bare_re.sub(lambda m: labels.get(m.group(1), m.group(1)), s)
-            except Exception:
-                pass
-
-            return s
-
-        def _fmt_expr(expr: str) -> str:
-            # 先把 slug/field 變中文，再處理 row 與運算子
-            s = _humanize_slug_field(expr)
-            return s
-
-        # 自由變數
-        fv_raw = user_params.get("free_vars") or []
-        fv_tokens = [t.strip() for t in (fv_raw if isinstance(fv_raw, list) else str(fv_raw).split(",")) if str(t).strip()]
-
-        def _fmt_free_var(tok: str) -> str:
-            tok = tok.strip()
-            # 其餘（含 slug.field 或 "slug field"）直接走人性化
-            return _humanize_slug_field(tok)
-
-        fv_cn = "、".join([_fmt_free_var(t) for t in fv_tokens]) if fv_tokens else "None"
-
-        # 條件清單
+        free_vars = user_params.get("free_vars") or []
         cons = user_params.get("constraints") or {}
-        lines: List[str] = []
-        lines.append("#### Current constraints preview")
-        lines.append(f"free variable(s):{fv_cn}")
 
-        cond_lines: List[str] = []
-        if isinstance(cons, dict) and cons:
-            OP_ORDER = ["==", ">=", "<=", ">", "<"]
-            for lhs in sorted(cons.keys(), key=lambda x: str(x)):
-                ops = cons.get(lhs) or {}
-                lhs_cn = _fmt_expr(lhs)
-                for op in OP_ORDER:
-                    if op in ops:
-                        vals = ops[op] if isinstance(ops[op], (list, tuple)) else [ops[op]]
-                        for rhs in vals:
-                            rhs_cn = _fmt_expr(rhs) if isinstance(rhs, str) else _fmt_num(rhs)
-                            cond_lines.append(f"{lhs_cn} {'=' if op == '==' else op} {rhs_cn}")
-        if cond_lines:
-            lines.append("Constraints:")
-            lines += [f"{i}. {s}" for i, s in enumerate(cond_lines, 1)]
-        else:
-            lines.append("Constraints: none")
+        if not free_vars and not cons:
+            return "_No constraints set yet._"
+
+        lines = ["**Current constraints preview**"]
+        if free_vars:
+            lines.append("- Free variables:")
+            for t in free_vars:
+                if isinstance(t, str) and t.strip():
+                    lines.append(f"  - {_pretty_tok(t.strip())}")
+
+        if cons:
+            lines.append("- Constraints:")
+            try:
+                for expr, ops in cons.items():
+                    if not isinstance(expr, str):
+                        continue
+                    if isinstance(ops, dict):
+                        parts = []
+                        for op, v in ops.items():
+                            parts.append(f"{op} {v}")
+                        lines.append(f"  - `{expr}`: " + ", ".join(parts))
+                    else:
+                        lines.append(f"  - `{expr}`: {ops}")
+            except Exception:
+                pass
+
         return "\n".join(lines)
 
-    # === D. 欄位/別名解析 ===
     def _zhnum_to_int(self, s: str) -> Optional[int]:
         s = s.strip()
         if not s:
@@ -1959,79 +1992,135 @@ class ConstraintAgent(BaseAgent):
         return fv, (cons or None)
 
     def _parse_single_bound_generic(self, tool_name: str, text: str, payload: Dict[str, Any]):
-        """泛用：『第N筆/品項名』+ 欄位 + 至多/至少 + 數字"""
+        """Generic parser for row-based tools: (item index / item name) + field + bound (<=/>=/==) + number."""
         meta = TOOL_MAP.get(tool_name, {}) or {}
         row_fields: List[str] = list(meta.get("row_fields") or [])
         if not row_fields:
             return None, None
 
         user_params = payload.get("user_params", {}) or {}
+        rows = user_params.get("rows") or []
+        nrows = len(rows) if isinstance(rows, list) else 0
+        if nrows == 0:
+            return None, None
 
         labels: Dict[str, str] = meta.get("field_labels", {}) or {}
         alias_map: Dict[str, List[str]] = meta.get("alias", {}) or {}
 
+        # Build row aliases: row{i} -> name
+        name_keys = ("item", "main_name", "sub_name", "category", "name", "tax_item")
+        row_aliases: Dict[str, str] = {}
+        for i, r in enumerate(rows):
+            if not isinstance(r, dict):
+                continue
+            nm = None
+            for nk in name_keys:
+                v = r.get(nk)
+                if isinstance(v, str) and v.strip():
+                    nm = v.strip()
+                    break
+            row_aliases[f"row{i}"] = nm or f"Item {i+1}"
+
         def _field_key_from_phrase(ph: str) -> Optional[str]:
-            ph = (ph or "").strip("「」『』").strip()
+            ph = (ph or "").strip().strip('"').strip("'").strip()
+            ph = ph.strip("[](){}:;,. ").lower()
             if not ph:
                 return None
+            # direct match on field
+            for k in row_fields:
+                if ph == k.lower():
+                    return k
+            # alias map
             for k, arr in alias_map.items():
                 if k in row_fields:
                     for a in (arr or []):
-                        a = (a or "").strip()
-                        if a and (a in ph):
+                        a2 = (a or "").strip().lower()
+                        if a2 and a2 in ph:
                             return k
+            # label contains keywords
             for k, lab in labels.items():
                 if k in row_fields and isinstance(lab, str) and lab:
-                    toks = re.findall(r"[\u4e00-\u9fff]+", lab)
-                    if any(t and t in ph for t in toks):
+                    lab2 = lab.lower()
+                    if ph in lab2 or any(tok and tok in lab2 for tok in ph.split()):
                         return k
+            # common English fallbacks
+            if any(w in ph for w in ["qty", "quantity", "amount", "count"]):
+                if "quantity" in row_fields:
+                    return "quantity"
+            if any(w in ph for w in ["unit price", "price per unit", "unitprice"]):
+                if "tax_price_per_unit" in row_fields:
+                    return "tax_price_per_unit"
+            if any(w in ph for w in ["abv", "alcohol", "alcohol content"]):
+                if "alcohol_content" in row_fields:
+                    return "alcohol_content"
             return None
 
         op_map = {
-            "no more than": "<=",
-            "must not exceed": "<=",
-            "at most": "<=",
-            "not higher than": "<=",
-            "≦": "<=",
-            "≤": "<=",
-            "<=": "<=",
-
-            "at least": ">=",
-            "not lower than": ">=",
-            "no less than": ">=",
-            "≧": ">=",
-            "≥": ">=",
-            ">=": ">="
+            "at most": "<=", "no more than": "<=", "not exceed": "<=", "maximum": "<=",
+            "<=": "<=", "≤": "<=",
+            "at least": ">=", "no less than": ">=", "not less than": ">=", "minimum": ">=",
+            ">=": ">=", "≥": ">=",
+            "equal to": "==", "equals": "==", "==": "==", "=": "==",
         }
 
-        rx = re.compile(
-            r"(?:item\s*(?P<idx>\d+)|(?P<name>[A-Za-z0-9_()]+))\s*"
-            r"(?:'s)?\s*(?P<field>\"[^\"]+\"|'[^']+'|[A-Za-z0-9_]+)?\s*"
-            r"(?P<op>no more than|must not exceed|at most|not higher than|≦|≤|<=|"
-            r"at least|not lower than|no less than|≧|≥|>=)\s*"
-            r"(?P<num>[0-9][0-9,\.KMBT]*)"
-        )
         s = (text or "").strip()
+        if not s:
+            return None, None
+
+        rx = re.compile(
+            r"(?:item\s*(?P<idx1>\d+)|row\s*(?P<idx2>\d+)|(?P<name>[A-Za-z0-9_\-\s/]+))\s*"
+            r"(?:'s\s*)?(?P<field>[A-Za-z0-9_\-\s]+)?\s*"
+            r"(?P<op>not\s+exceed|no\s+more\s+than|at\s+most|maximum|<=|≤|at\s+least|no\s+less\s+than|minimum|>=|≥|equal\s+to|equals|==|=)\s*"
+            r"(?P<num>[0-9][0-9,\.]*)",
+            re.I
+        )
         m = rx.search(s)
         if not m:
             return None, None
 
-        idx_s = m.group("idx")
-        name = m.group("name") or ""
+        idx_s = m.group("idx1") or m.group("idx2")
+        name = (m.group("name") or "").strip()
         field_ph = (m.group("field") or "").strip()
-        op_kw = m.group("op")
-        num_s = m.group("num")
+        op_kw = (m.group("op") or "").strip().lower()
+        num_s = (m.group("num") or "").strip()
+
+        row_idx = None
+        if idx_s:
+            try:
+                row_idx = int(idx_s) - 1 if m.group("idx1") else int(idx_s)
+            except Exception:
+                row_idx = None
+        if row_idx is None and name:
+            name_l = name.lower()
+            for rk, nm in row_aliases.items():
+                nml = (nm or "").lower()
+                if nml and (nml in name_l or name_l in nml):
+                    try:
+                        row_idx = int(rk.replace("row", ""))
+                        break
+                    except Exception:
+                        pass
+        if row_idx is None or not (0 <= row_idx < nrows):
+            return None, None
 
         field_key = _field_key_from_phrase(field_ph) or (row_fields[0] if row_fields else None)
         if not field_key:
             return None, None
 
-        op = op_map.get(op_kw)
-        if op not in {"<=", ">="}:
+        op = None
+        for k, v in op_map.items():
+            if k in op_kw:
+                op = v
+                break
+        if op not in {"<=", ">=", "=="}:
             return None, None
+
         val = self._to_number(num_s)
         if val is None:
             return None, None
+
+        lhs = f"row{row_idx}.{field_key}"
+        return lhs, {lhs: {op: val}}
 
     def _parse_cn_ratio(self, tool_name: str, text: str, payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         s = (text or "").strip()
@@ -2262,15 +2351,30 @@ class ConstraintAgent(BaseAgent):
         return f"{lhs},{rhs}", {lhs: {op: rhs_expr}}
 
 
-    def _vars_in_expr(self, expr: str, allowed: set[str]) -> List[str]:
-        """在運算式中擷取有效變數（包含 row 變數）。"""
-        s = str(expr or ""); seen, out = set(), []
+    def _vars_in_expr(self, expr: str, allowed: set[str], row_spec: Optional[Dict[str, Any]] = None) -> List[str]:
+        """Extract valid variable tokens from an expression (including row variables like row0.quantity)."""
+        s = str(expr or "")
+        seen, out = set(), []
+        # row tokens
+        row_pat = re.compile(r"row(\d+)\.([A-Za-z_][A-Za-z0-9_]*)")
+        nrows = int(row_spec.get("nrows", 0)) if row_spec else 0
+        row_fields = set(row_spec.get("row_fields", [])) if row_spec else set()
+        for m in row_pat.finditer(s):
+            idx = int(m.group(1))
+            fld = m.group(2)
+            tok = f"row{idx}.{fld}"
+            if 0 <= idx < nrows and fld in row_fields and tok in allowed and tok not in seen:
+                seen.add(tok)
+                out.append(tok)
+
+        # normal tokens
         tok_pat = re.compile(r"[A-Za-z_][A-Za-z0-9_\.]*")
         for t in tok_pat.findall(s):
             if t.startswith("row"):
                 continue
             if t in allowed and t not in seen:
-                seen.add(t); out.append(t)
+                seen.add(t)
+                out.append(t)
         return out
 
     async def _nl_to_constraints(self, tool_name: str, user_text: str, payload: Dict[str, Any]) -> Tuple[Optional[List[str]], Optional[Dict[str, Any]]]:
@@ -2281,44 +2385,116 @@ class ConstraintAgent(BaseAgent):
         budget_field = meta.get("budget_field")
         base_allowed_vars = list(set(required) | set(constraint_fields) | ({budget_field} if budget_field else set()))
         alias = meta.get("alias", {}) or {}
+
         user_params = payload.get("user_params", {}) or {}
+        rows = user_params.get("rows") or []
+        nrows = len(rows) if isinstance(rows, list) else 0
+        row_fields: List[str] = list(meta.get("row_fields") or [])
+
+        row_aliases: Dict[str, str] = {}
+        if nrows:
+            name_keys = ("item", "main_name", "sub_name", "category", "name", "tax_item")
+            for i, r in enumerate(rows):
+                if not isinstance(r, dict):
+                    continue
+                nm = None
+                for nk in name_keys:
+                    v = r.get(nk)
+                    if isinstance(v, str) and v.strip():
+                        nm = v.strip()
+                        break
+                row_aliases[f"row{i}"] = nm or f"Item {i+1}"
+
         extra_aliases = {}
         if isinstance(payload.get("row_aliases"), dict):
             extra_aliases.update(payload["row_aliases"])
         if isinstance(user_params.get("row_aliases"), dict):
             extra_aliases.update(user_params["row_aliases"])
-        allowed_vars_for_prompt = base_allowed_vars
+        for rk, nm in (extra_aliases or {}).items():
+            if isinstance(rk, str) and isinstance(nm, str) and rk.startswith("row"):
+                row_aliases[rk] = nm
+
+        row_allowed_vars: List[str] = []
+        if nrows and row_fields:
+            for i in range(nrows):
+                for f in row_fields:
+                    row_allowed_vars.append(f"row{i}.{f}")
+
+        allowed_vars_for_prompt = base_allowed_vars + row_allowed_vars
+
         sys_prompt = (
-            "You are a 'Tax Constraint Compiler'. Your task is to convert the user's tax-related description into **strict JSON** (with `free_vars` and `constraints`).\n"
+            "You are a 'Tax Constraint Compiler'. Your task is to convert the user's description into STRICT JSON "
+            "(with `free_vars` and `constraints`).\n"
             f"1) You may ONLY use the following field keys: {', '.join(allowed_vars_for_prompt)}.\n"
             '2) Allowed operators: "==", ">=", "<=", ">", "<".\n'
-            '3) Convert written numbers into Arabic numerals.\n'
-            '4) You may use compound expressions (e.g., a + b).\n'
-            '5) If you use an expression like a+b, `free_vars` must include every variable involved.\n'
-            '6) If the same variable has multiple operators, merge them under the same key.\n'
-            '7) Output EXACTLY one JSON object and nothing else.\n'
+            "3) Convert written numbers into Arabic numerals.\n"
+            "4) You may use compound expressions (e.g., a + b).\n"
+            "5) If you use an expression like a+b, `free_vars` must include every variable involved.\n"
+            "6) If the same variable has multiple operators, merge them under the same key.\n"
+            "7) Output EXACTLY one JSON object and nothing else.\n"
         )
+
+        if nrows and row_fields:
+            sys_prompt += (
+                "\n[Rows / items]\n"
+                "If the user refers to an item (by name or by 'Item N'), rewrite it into row{i}.<field>.\n"
+                f"- row index i is between 0 and {max(nrows-1, 0)}\n"
+                f"- <field> must be one of: {', '.join(row_fields)}\n"
+                "- Resolve item name to row{i} using row_aliases.\n"
+                "- Cross-row relations are allowed (e.g., 'row0.quantity == row1.quantity / 3').\n"
+                "- If you use compound expressions or cross-row relations, include all involved variables in free_vars.\n"
+            )
+
         mapping_doc: Dict[str, Any] = {"field_labels": labels, "aliases": alias}
-       
+        if nrows and row_fields:
+            mapping_doc["row_spec"] = {
+                "row_count": nrows,
+                "row_fields": row_fields,
+                "row_aliases": row_aliases,
+                "how_to_refer": "Rewrite 'item name + field' into row{i}.<field>; i is determined by row_aliases.",
+            }
+
         examples = [
             {"in": "The total of my salary and my wife's salary must be 3,000,000",
-            "out": {"free_vars": ["salary_self", "salary_spouse"],
-                    "constraints": {"salary_self + salary_spouse": {"==": 3000000}}}},
+             "out": {"free_vars": ["salary_self", "salary_spouse"],
+                     "constraints": {"salary_self + salary_spouse": {"==": 3000000}}}},
             {"in": "Itemized deduction must not exceed 300,000",
-            "out": {"free_vars": [], "constraints": {"itemized_deduction": {"<=": 300000}}}},
+             "out": {"free_vars": [], "constraints": {"itemized_deduction": {"<=": 300000}}}},
             {"in": "House transaction gain must be at least 200,000, and other income must be between 0 and 50,000",
-            "out": {"free_vars": [], "constraints": {"house_transaction_gain": {">=": 200000},
-                                                    "other_income": {">=": 0, "<=": 50000}}}},
-            {"in": "None",
-            "out": {"free_vars": [], "constraints": {}}},
+             "out": {"free_vars": [], "constraints": {"house_transaction_gain": {">=": 200000},
+                                                     "other_income": {">=": 0, "<=": 50000}}}},
+            {"in": "None", "out": {"free_vars": [], "constraints": {}}},
         ]
+
+        if nrows and row_fields:
+            nm0 = row_aliases.get("row0", "Item 1")
+            nm1 = row_aliases.get("row1", "Item 2")
+            row_demos = []
+            if "quantity" in row_fields:
+                row_demos.append({
+                    "in": f"{nm0} quantity must not exceed 100",
+                    "out": {"free_vars": [], "constraints": {"row0.quantity": {"<=": 100}}},
+                })
+            if "tax_price_per_unit" in row_fields and nrows >= 2:
+                row_demos.append({
+                    "in": f"{nm1} unit price equals 15000",
+                    "out": {"free_vars": [], "constraints": {"row1.tax_price_per_unit": {"==": 15000}}},
+                })
+            if "quantity" in row_fields and nrows >= 2:
+                row_demos.append({
+                    "in": f"{nm0} quantity equals one third of {nm1} quantity",
+                    "out": {"free_vars": ["row0.quantity", "row1.quantity"],
+                            "constraints": {"row0.quantity": {"==": "row1.quantity / 3"}}},
+                })
+            if row_demos:
+                examples.extend(row_demos)
 
         user_prompt = (
             "Field keys and alias reference (JSON):\n"
             + json.dumps(mapping_doc, ensure_ascii=False, indent=2)
             + "\n\nExamples (JSON):\n"
             + json.dumps(examples, ensure_ascii=False, indent=2)
-            + "\n\nConvert the following description into JSON (output JSON only):\n"
+            + "\n\nConvert the following statement into JSON (output JSON only):\n"
             + str(user_text)
         )
 
@@ -2327,7 +2503,7 @@ class ConstraintAgent(BaseAgent):
 
         obj = self._json_loads_with_merge(raw) or {}
         if not isinstance(obj, dict):
-            _append_debug(self.memory, "[ConstraintAgent] LLM constraints resolved failed（not dict）")
+            _append_debug(self.memory, "[ConstraintAgent] LLM constraints parsing failed (not a dict).")
             return None, None
 
         def _to_list(x):
@@ -2337,87 +2513,117 @@ class ConstraintAgent(BaseAgent):
                 return [str(t).strip() for t in x if str(t).strip()]
             return [t.strip() for t in str(x).split(",") if t.strip()]
 
-        fv: List[str] = _to_list(obj.get("free_vars"))
-        row_token_re = re.compile(r"row(\d+)\.([A-Za-z_][A-Za-z0-9_]*)")
+        fv = _to_list(obj.get("free_vars") or obj.get("freeVars") or obj.get("free"))
+        cons = obj.get("constraints") or obj.get("constraint") or obj.get("cons") or {}
 
-        cons = obj.get("constraints")
-        if not isinstance(cons, dict):
-            cons = {}
-
-        # 把頂層「非保留鍵」也視為 constraints 的展開
-        TOPLEVEL_RESERVED = {"free_vars", "constraints", "budget_tax", "target_tax"}
-        for k, v in list(obj.items()):
-            if k in TOPLEVEL_RESERVED:
+        # Expand top-level non-reserved keys into constraints
+        for k, v in obj.items():
+            if k in {"free_vars", "freeVars", "free", "constraints", "constraint", "cons"}:
                 continue
-            if isinstance(v, dict):
-                ops2 = {}
-                for op, val in v.items():
-                    op2 = "==" if op == "=" else op
+            if isinstance(k, str) and k.strip():
+                if isinstance(v, dict):
+                    cons.setdefault(k.strip(), {}).update(v)
+                else:
+                    cons.setdefault(k.strip(), {}).update({"==": v})
+
+        # Normalize constraints values
+        if cons and isinstance(cons, dict):
+            normalized: Dict[str, Dict[str, Any]] = {}
+            for k, ops in cons.items():
+                if not isinstance(k, str):
+                    continue
+                if not isinstance(ops, dict):
+                    continue
+                ops2: Dict[str, Any] = {}
+                for op2, val in ops.items():
+                    if op2 == "=":
+                        op2 = "=="
                     if op2 not in {"==", ">=", "<=", ">", "<"}:
                         continue
                     if isinstance(val, (int, float)):
                         ops2[op2] = float(val)
                     elif isinstance(val, str):
                         s = val.strip()
-                        rhs_expr = self._parse_linear_rhs(s)
-                        if rhs_expr is not None:
-                            # 例如 "row0.quantity * 0.3"
-                            ops2[op2] = rhs_expr
+                        num = self._to_number(s)
+                        if num is not None:
+                            ops2[op2] = num
                         else:
-                            num = self._to_number(s)
-                            if num is not None:
-                                # 純數字字串
-                                ops2[op2] = num
-                            else:
-                                # 保留一般變數 / 運算式字串（例如 "cigar_new.quantity"）
-                                ops2[op2] = s
+                            ops2[op2] = s
+                    else:
+                        try:
+                            ops2[op2] = float(val)
+                        except Exception:
+                            continue
                 if ops2:
-                    cons.setdefault(k, {}).update(ops2)
+                    normalized.setdefault(k.strip(), {}).update(ops2)
+            cons = normalized or None
+        else:
+            cons = None
 
         base_allowed_set = set(base_allowed_vars)
-        allowed_set = base_allowed_set 
+        row_spec = {"nrows": nrows, "row_fields": row_fields} if (nrows and row_fields) else None
+        allowed_set = set(base_allowed_vars) | set(row_allowed_vars)
 
-        # 只允許：
-        # 1. 在 allowed_set（optimizable_fields + row_vars + budget 等）
-        # 2. 且有 field_labels（會被轉成中文），或是 row{i}.field 形式
         label_keys = set(labels.keys())
+        row_pat = re.compile(r"row(\d+)\.([A-Za-z_][A-Za-z0-9_]*)")
+
+        def _is_valid_row_tok(tok: str) -> bool:
+            m = row_pat.fullmatch(tok)
+            if not m:
+                return False
+            idx = int(m.group(1))
+            fld = m.group(2)
+            if not (0 <= idx < nrows):
+                return False
+            if fld not in row_fields:
+                return False
+            return tok in allowed_set
 
         def _is_valid_fv_token(tok: str) -> bool:
-            # 一般變數：必須在 allowed_set，且有對應的 field_labels
-            return (tok in allowed_set) and (tok in label_keys)
-        
+            return ((tok in allowed_set) and (tok in label_keys)) or _is_valid_row_tok(tok)
+
+        def _extract_valid_row_tokens(expr: str) -> List[str]:
+            if not (expr and nrows and row_fields):
+                return []
+            out = []
+            for m in row_pat.finditer(str(expr)):
+                tok = f"row{int(m.group(1))}.{m.group(2)}"
+                if _is_valid_row_tok(tok):
+                    out.append(tok)
+            return out
+
         cleaned: Dict[str, Dict[str, Any]] = {}
         if cons:
             for expr, ops in (cons or {}).items():
                 expr_str = str(expr)
-                vars_in_expr = self._vars_in_expr(expr_str, allowed_set)
+                vars_in_expr = self._vars_in_expr(expr_str, allowed_set, row_spec=row_spec)
                 if not vars_in_expr:
                     continue
                 ops2: Dict[str, Any] = {}
                 for op, val in (ops or {}).items():
-                    if op == "=":
-                        op = "=="
-                    if op not in {"==", ">=", "<=", ">", "<"}:
-                        continue
                     try:
+                        if op == "=":
+                            op = "=="
+                        if op not in {"==", ">=", "<=", ">", "<"}:
+                            continue
+
                         if isinstance(val, str):
-                            s2 = val.strip()
-                            rhs_expr = self._parse_linear_rhs(s2)
-                            if rhs_expr is not None:
-                                # 驗證 RHS 變數是否合法
-                                var_part = rhs_expr.split("*")[0].split("/")[0].strip()
-                                valid_rhs = (var_part in base_allowed_set)
-                                if not valid_rhs:
-                                    _append_debug(self.memory, f"[ConstraintAgent] Discard illegal RHS variables: {rhs_expr}")
-                                    continue
-                                ops2[op] = rhs_expr
-                            else:
-                                num = self._to_number(s2)
-                                if num is None:
-                                    ops2[op] = num
-                                ops2[op] = s2
+                            rhs_expr = val.strip()
+                            toks = re.findall(r"[A-Za-z_][A-Za-z0-9_\.]*", rhs_expr)
+                            illegal = []
+                            for t in toks:
+                                if t.startswith("row"):
+                                    if not _is_valid_row_tok(t):
+                                        illegal.append(t)
+                                else:
+                                    if t not in base_allowed_set:
+                                        illegal.append(t)
+                            if illegal:
+                                _append_debug(self.memory, f"[ConstraintAgent] Discard illegal RHS variables: {rhs_expr}")
+                                continue
+                            ops2[op] = rhs_expr
                         else:
-                            ops2[op] = float(val)
+                            ops2[op] = val
                     except Exception:
                         continue
                 if ops2:
@@ -2428,7 +2634,10 @@ class ConstraintAgent(BaseAgent):
         auto_vars: List[str] = []
         if cons:
             for expr, ops in cons.items():
-                auto_vars += self._vars_in_expr(expr, allowed_set)
+                auto_vars += self._vars_in_expr(expr, allowed_set, row_spec=row_spec)
+                for v in (ops or {}).values():
+                    if isinstance(v, str):
+                        auto_vars += _extract_valid_row_tokens(v)
 
         def _uniq(lst: List[str]) -> List[str]:
             return list(dict.fromkeys([t for t in lst if t]))
@@ -2789,6 +2998,23 @@ class ConstraintAgent(BaseAgent):
         if stage == "constraints_reply":
             text = (obj.get("text") or "").strip()
 
+            # Export command is also allowed here
+            try:
+                if _EXPORT_CMD_RE.search(text):
+                    _append_debug(self.memory, "[ConstraintAgent] Detected export command during constraints stage.")
+                    info = await _trigger_fin_export(self.memory)
+                    title = info.get("title") if isinstance(info, dict) else None
+                    return {
+                        "type": "follow_up",
+                        "stage": "export",
+                        "question": (
+                            "Report submitted to the Fin backend (async)."
+                            + (f" Title: {title}." if title else "")
+                        ),
+                    }
+            except Exception as e:
+                return {"type": "follow_up", "stage": "export_error", "question": f"Export failed: {e}"}
+
             # English-only "compute now" triggers
             if re.search(r"(?:^|\s)(compute\s*now|run\s*now|direct\s*calc)(?:$|\s)", text, flags=re.I):
                 payload = self.memory.get("pending_constraint_payload") or {}
@@ -3019,7 +3245,6 @@ class ConstraintAgent(BaseAgent):
             }
 
         return obj
-
 
 class ExecuteAgent(BaseAgent):
     async def handle(self, payload: Dict[str, Any]):
@@ -3699,16 +3924,18 @@ class ReasoningAgent(BaseAgent):
 
         persist_dir = os.getenv("RAG_CHROMA_DIR", "rag/chroma")
         collection = os.getenv("RAG_COLLECTION", "tax_handbook")
-        if not os.path.isdir(persist_dir):
-            no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
-            return (no_rag[:5], [])
+        with self._perf_span("rag:check_store"):
+            if not os.path.isdir(persist_dir):
+                no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
+                return (no_rag[:5], [])
 
         try:
-            db = Chroma(
-                collection_name=collection,
-                persist_directory=persist_dir,
-                embedding_function=OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small")),
-            )
+            with self._perf_span("rag:init_vectorstore"):
+                db = Chroma(
+                    collection_name=collection,
+                    persist_directory=persist_dir,
+                    embedding_function=OpenAIEmbeddings(model=os.getenv("EMBED_MODEL", "text-embedding-3-small")),
+                )
         except Exception:
             no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
             return (no_rag[:5], [])
@@ -3836,7 +4063,6 @@ class ReasoningAgent(BaseAgent):
 
         no_rag = await self._advice_from_result_no_rag(tool_name, result, payload, labels)
         return (no_rag[:5], [])
-
     def _effective_params(self, final_params: dict | None, input_params: dict | None) -> dict:
         """
         Override input_params with final_params.value to get an "effective parameter view" for making suggestions.

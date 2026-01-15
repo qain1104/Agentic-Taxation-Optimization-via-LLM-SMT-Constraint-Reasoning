@@ -19,27 +19,40 @@ import gradio as gr
 import logging
 
 logging.basicConfig(
-    level=logging.INFO,  # 想更安靜就改 WARNING
+    level=logging.INFO,  # use WARNING for quieter logs
     format="%(asctime)s %(levelname)s %(name)s: %(message)s"
 )
 
-from multi_agent_tax_system_en import (
-    CallerAgent,
-    ConstraintAgent,
-    ExecuteAgent,
-    ReasoningAgent,
-    MemoryStore,
-    TOOL_MAP,
-)
+try:
+    from multi_agent_tax_system_en import (
+        CallerAgent,
+        ConstraintAgent,
+        ExecuteAgent,
+        ReasoningAgent,
+        MemoryStore,
+        TOOL_MAP,
+        _trigger_fin_export,
+    )
+except ImportError:
+    # Fallback for alternative module naming (e.g., *_updated.py)
+    from multi_agent_tax_system_en_updated import (  # type: ignore
+        CallerAgent,
+        ConstraintAgent,
+        ExecuteAgent,
+        ReasoningAgent,
+        MemoryStore,
+        TOOL_MAP,
+        _trigger_fin_export,
+    )
 
-# 每個 session 一組獨立的 MemoryStore + agents
+# One independent MemoryStore + agent bundle per session
 SESSIONS: dict[str, dict] = {}
 
-# ===== 用隱藏標籤綁定對話 Session（避免用 id(history) 每次都變） =====
+# ===== Bind a stable chat session via a hidden tag (avoid relying on id(history)) =====
 _SESSION_TAG_RE = re.compile(r"<!--\s*SESSION:([0-9a-fA-F-]{8,})\s*-->")
 
 def _get_or_create_session_key(history) -> str:
-    """從 history 內倒序尋找 SESSION 標記；若沒有，生成新的 UUID。"""
+    """Scan history backward for a SESSION tag; if absent, create a new UUID."""
     if isinstance(history, list):
         for msg in reversed(history):
             content = msg.get("content") if isinstance(msg, dict) else None
@@ -51,15 +64,24 @@ def _get_or_create_session_key(history) -> str:
     return str(uuid.uuid4())
 
 def _attach_session_tag(text: str, session_key: str) -> str:
-    """在回覆文字末尾附加 <!-- SESSION:... -->，避免重複附加。"""
+    """Append <!-- SESSION:... --> at the end of the reply (idempotent)."""
     if not isinstance(text, str):
         text = str(text)
+
+    # Normalize locale-specific punctuation into English-friendly ASCII
+    text = (
+        text.replace("「", '"')
+            .replace("」", '"')
+            .replace("（", "(")
+            .replace("）", ")")
+    )
+
     if _SESSION_TAG_RE.search(text):
         return text
     return text + f"\n\n<!-- SESSION:{session_key} -->"
 
 def _get_session_bundle(session_key: str) -> dict:
-    """依 session_key 取得或建立一組 session 專用的 agents + memory。"""
+    """Get or create the per-session agent bundle + memory by session_key."""
     bundle = SESSIONS.get(session_key)
     if bundle is None:
         mem = MemoryStore()
@@ -69,7 +91,7 @@ def _get_session_bundle(session_key: str) -> dict:
             "constraint": ConstraintAgent(memory=mem),
             "executor": ExecuteAgent(memory=mem),
             "reasoner": ReasoningAgent(memory=mem),
-            # 用來計算「系統問 → 使用者回」的跨 request 等待時間
+            # Used to measure cross-request user wait time (system question → user reply)
             "awaiting_user": None,  # {"agent":..., "phase":..., "t0":...}
         }
         SESSIONS[session_key] = bundle
@@ -87,36 +109,40 @@ def _dump_debug_and_clear(caller_agent):
     )
 
 def _strip_inline_tips(md: str) -> str:
-    """讓報告本體乾淨：剝掉 ReasoningAgent 最後附加的互動提示"""
+    """Keep the report clean: remove UI/interaction tips appended by agents."""
     if not isinstance(md, str):
         return md
-    tip = "Want to change the conditions? Reply「Add Condition」 to add new restrictions to the existing ones; reply 「Reset Condition」to clear all conditions and return to the setting stage."
-    md = md.replace("\n\n> " + tip, "")
-    md = md.replace("\n> " + tip, "")
-    md = md.replace("> " + tip, "")
-    md = md.replace(tip, "")
+
+    # Remove blockquoted footer tips that mention interactive commands
+    md = re.sub(
+        r"\n*(?:\n?>\s*[^\n]*(?:add condition|reset constraints|next step|calculate directly)[^\n]*\n?)+",
+        "\n",
+        md,
+        flags=re.I,
+    )
     return md.strip()
 
 _TUNING_TIPS_BLOCK_RE = re.compile(
-    r"\n*Condition adjustment suggestions\s*\n"          # block header
-    r"(?:.*\n)*?"                   # block body (non-greedy)
-    r"(?=\n(?:To add more conditions | To complete settings | To clear | Current conditions | Stage 3 | Reply「Next step」|$))",
-    re.M
+    r"\n*Condition adjustment suggestions\s*\n"  # block header
+    r"(?:.*\n)*?"                                   # block body (non-greedy)
+    r"(?=\n(?:To add more|To complete|To clear|Current conditions|Stage 3|Next step|$))",
+    re.M,
 )
 
+
 def _strip_condition_tuning_tips(md: str) -> str:
-    """移除 ConstraintAgent 的『條件調校建議』區塊，保留 early_tips_md。"""
+    """Remove the ConstraintAgent "Condition adjustment suggestions" block, keep early_tips_md."""
     if not isinstance(md, str):
         return md
     return _TUNING_TIPS_BLOCK_RE.sub("\n", md).strip()
 
 
 def _ui_footer_tip() -> str:
-    """報告下方的 UI 操作說明（不放進報告本體）"""
+    """UI footer hints (not part of the report body)."""
     return (
-        "\n\n> **Next Step**\n"
-        "> • To adjust the conditions: reply 「Add conditions」 or reply 「Reset conditions」 to return to the setting stage.\n"
-        "> • To use this round of reports as the output report, enter 「Calculation complete」.\n"
+        "\n\n> **Next steps**\n"
+        '> • To adjust constraints: reply "Add condition", or reply "Reset constraints" to return to the setting stage.\n'
+        '> • To save this round as the final report: type "finish calculation".\n'
     )
 
 def _details_text(title: str, lines) -> str:
@@ -160,7 +186,7 @@ def _format_perf_breakdown(perf) -> str:
     total_all = sum(totals.values())
 
     md = []
-    md.append(f"\n\n**⏱️ Thinking Time（this round）≈ {total_all:.3f}s**")
+    md.append(f"\n\n**⏱️ Thinking Time(this round)≈ {total_all:.3f}s**")
     md.append("\n<details><summary>Detailed time taken (click to expand)</summary>\n")
     md.append("\n| Agent | Phase | Time (s) |")
     md.append("|---|---|---:|")
@@ -175,7 +201,7 @@ def _format_perf_breakdown(perf) -> str:
     return "\n".join(md)
 
 def _persist_perf_snapshot(executor, session_key: str, turn_perf, meta: dict | None = None):
-    """將本輪 perf trace 存入 executor.memory['perf_trace']（最多 50 筆），方便回溯/匯出。"""
+    """Store this turn's perf trace in executor.memory['perf_trace'] (keep up to 50) for debugging/export."""
     try:
         perf_plain = _perf_to_plain_dict(turn_perf)
         item = {
@@ -198,7 +224,7 @@ def _persist_perf_snapshot(executor, session_key: str, turn_perf, meta: dict | N
 # =========================
 
 def _preserve_reopen_context_from_exec(exec_out: dict, caller, constraint, executor):
-    """把工具執行結果存入各 Agent 的記憶，供『再加條件 / 重設條件』續接使用。"""
+    """Persist tool execution results into each agent's memory for continuation (add/reset constraints)."""
     try:
         tool = exec_out.get("tool_name")
         pay  = exec_out.get("payload") or {}
@@ -356,9 +382,17 @@ def _save_last_run_files(tool_name: str | None, final_md: str, result: dict, pay
 def _should_finish(s: str) -> bool:
     s = (s or "").strip().lower()
     return any(k in s for k in [
-        "Calculation Completed","Recommendation Report Generated",
-        "Conclusion Report Generated", "Conclusions Produced",
-        "Summary", "Recommendations Produced", "final report", "finish & advise"
+        "finish calculation",
+        "complete calculation",
+        "calculation completed",
+        "generate recommendation report",
+        "generate suggestions report",
+        "generate conclusion report",
+        "generate final report",
+        "final report",
+        "finish & advise",
+        "summary",
+        "conclusion",
     ])
 
 def _reset_session_state(caller, constraint, executor, reasoner):
@@ -424,12 +458,12 @@ async def chat_logic(
 
     turn_perf = _perf_new()
 
-    # 0) 跨 request 的 user wait time（上一輪系統提問 -> 本輪 user 回覆）
-    #    注意：此等待時間不應計入「思考時間」，所以不寫入 turn_perf
+    # 0) Cross-request user wait time (previous system question → current user reply)
+    #    Note: this should NOT be counted as agent compute time, so it is not recorded in turn_perf.
     wait_state = bundle.get("awaiting_user")
     if isinstance(wait_state, dict) and isinstance(wait_state.get("t0"), (int, float)):
         dt_wait = time.perf_counter() - wait_state["t0"]
-        # 若你想留存等待時間，可放到 memory / perf_trace meta（可選）
+        # If you want to persist this wait time, store it in memory/perf_trace meta (optional).
         # executor.memory.set("last_user_wait_sec", float(dt_wait))
     bundle["awaiting_user"] = None
 
@@ -452,9 +486,9 @@ async def chat_logic(
 
     def _should_hard_reset(s: str) -> bool:
         s = (s or "").strip().lower()
-        if "條件" in s:
+        if ("constraint" in s) or ("condition" in s):
             return False
-        exact = {"restart", "hard reset"}
+        exact = {"reset", "clear", "restart", "start over", "hard reset"}
         if s in exact:
             return True
         return s in {"reset()", "reset all", "clear all"}
@@ -488,19 +522,19 @@ async def chat_logic(
         ask = await constraint.handle({"type": "reopen_constraints"})
         _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
-        cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
-        q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
+        cons_dbg_html = _details_text("DEBUG(ConstraintAgent)", ask.get("debug") or [])
+        q = _strip_condition_tuning_tips(ask.get("question") or "(No question text)")
         debug_block = _dump_debug_and_clear(caller) if show_debug else ""
 
         msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
         _persist_perf_snapshot(executor, sess_key, turn_perf, meta={"type": "reset_constraints_reopen"})
         return _attach_session_tag(msg, sess_key)
 
-    # 1)「重設條件」
+    # 1) Reset constraints
     if _should_reset_constraints(user_msg):
         return await _do_reset_constraints_and_reopen(session_key)
 
-    # 2)「硬重置」
+    # 2) Hard reset
     if _should_hard_reset(user_msg):
         for a in (caller, constraint, executor, reasoner):
             try:
@@ -511,7 +545,7 @@ async def chat_logic(
         _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "hard_reset"})
         return _attach_session_tag(INTRO_MSG, session_key)
 
-    # 3)「計算完成」
+    # 3) Finish calculation
     if _should_finish(user_msg):
         if not has_latest_report():
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "finish_no_report"})
@@ -520,12 +554,20 @@ async def chat_logic(
         base = "reports/last_run"
         sent_title = ""
         t0 = time.perf_counter()
+        try:
+            info = await _trigger_fin_export(executor.memory)
+            if isinstance(info, dict):
+                sent_title = info.get("title") or ""
+            else:
+                sent_title = str(info) if info is not None else ""
+        except Exception as e:
+            sent_title = f"(Export skipped: {e})"
         _perf_add(turn_perf, "ExecuteAgent", "fin_export_total", time.perf_counter() - t0)
 
         msg = (
-            f"✅ The final **conclusion report** has been automatically saved.:\n"
+            f"✅ The final **conclusion report** has been automatically saved:\n"
             f"- {base}/last.md\n- {base}/last.json\n\n"
-            f"（Each time calculation is completed, the latest version will be overwritten. Report has been sent:{sent_title}"
+            f"(Each time you finish, the latest version overwrites the previous one. Report sent: {sent_title}"
             + _format_perf_breakdown(turn_perf)
         )
         _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "finish"})
@@ -544,7 +586,7 @@ async def chat_logic(
             parsed = await constraint.handle({"type": "constraints_reply", "text": user_msg})
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
-            cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", parsed.get("debug") or [])
+            cons_dbg_html = _details_text("DEBUG(ConstraintAgent)", parsed.get("debug") or [])
 
             if parsed.get("type") == "reset_constraints":
                 return await _do_reset_constraints_and_reopen(session_key)
@@ -641,7 +683,7 @@ async def chat_logic(
                 return _attach_session_tag(msg, session_key)
 
             if parsed.get("type") == "follow_up":
-                q = _strip_condition_tuning_tips(parsed.get("question") or "（沒有問題文字）")
+                q = _strip_condition_tuning_tips(parsed.get("question") or "(No question text)")
                 debug_block = _dump_debug_and_clear(caller) if show_debug else ""
                 msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_follow_up"})
@@ -649,7 +691,7 @@ async def chat_logic(
 
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
             msg = (
-                "⚠️ 未知 ConstraintAgent 回覆：\n```json\n"
+                "⚠️ Unknown ConstraintAgent reply:\n```json\n"
                 + json.dumps(parsed, ensure_ascii=False, indent=2)
                 + "\n```"
                 + (cons_dbg_html if show_debug else "")
@@ -669,8 +711,8 @@ async def chat_logic(
             ask = await constraint.handle({"type": "reopen_constraints"})
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
-            cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
-            q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
+            cons_dbg_html = _details_text("DEBUG(ConstraintAgent)", ask.get("debug") or [])
+            q = _strip_condition_tuning_tips(ask.get("question") or "(No question text)")
             debug_block = _dump_debug_and_clear(caller) if show_debug else ""
             msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
             _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "reopen_constraints"})
@@ -693,7 +735,7 @@ async def chat_logic(
         rtype = result.get("type")
 
         if rtype == "follow_up":
-            msg = result.get("question") or "（沒有問題文字）"
+            msg = result.get("question") or "(No question text)"
             if result.get("stage") == "constraints":
                 try:
                     pc_payload = caller.memory.get("pending_constraint_payload")
@@ -720,10 +762,10 @@ async def chat_logic(
             _perf_add(turn_perf, "ConstraintAgent", "handle_total", time.perf_counter() - t0)
 
             payload_fmt = json.dumps(payload, ensure_ascii=False, indent=2)
-            cons_dbg_html = _details_text("DEBUG（ConstraintAgent）", ask.get("debug") or [])
+            cons_dbg_html = _details_text("DEBUG(ConstraintAgent)", ask.get("debug") or [])
 
             if ask.get("type") == "follow_up":
-                q = _strip_condition_tuning_tips(ask.get("question") or "（沒有問題文字）")
+                q = _strip_condition_tuning_tips(ask.get("question") or "(No question text)")
                 debug_block = _dump_debug_and_clear(caller) if show_debug else ""
                 msg = q + (cons_dbg_html if show_debug else "") + debug_block + _format_perf_breakdown(turn_perf)
                 _persist_perf_snapshot(executor, session_key, turn_perf, meta={"type": "constraint_follow_up_after_tool_request"})
@@ -847,7 +889,7 @@ with gr.Blocks(
     title="Taiwan Tax Agentic Service Demo",
     theme=gr.themes.Soft(),
     css=r"""
-    /* ==== 自訂聊天框：移除右上角垃圾桶（Clear） ==== */
+    /* ==== Custom chat UI: remove the top-right Clear button ==== */
     #tax-chatbot .icon-button-wrapper.top-panel { display: none !important; }
 
     #tax-chatbot button[aria-label="Clear"],
@@ -874,7 +916,7 @@ with gr.Blocks(
                 type="messages",
                 height=560,
                 show_copy_button=True,
-                label="對話",
+                label="Conversation",
                 elem_id="tax-chatbot",
             )
             msg = gr.Textbox(
@@ -927,20 +969,20 @@ with gr.Blocks(
                 )
 
     def jump_to_tax(tool_name: str, history, show_dbg=False, auto_rst=True):
-        """側邊稅種按鈕：不走 LLM 判斷，直接進入該稅種『階段一（inputs）』。"""
+        """Sidebar quick-pick: skip LLM routing and jump straight to Stage 1 (inputs) for that tax."""
         session_key = _get_or_create_session_key(history)
         bundle = _get_session_bundle(session_key)
         mem = bundle.get("memory")
         caller = bundle.get("caller")
 
-        # 清掉舊上下文（但不清全域 SESSIONS）
+        # Clear old context (but do not clear global SESSIONS)
         try:
             if mem:
                 mem.clear()
         except Exception:
             pass
 
-        # 初始化到指定稅種的階段一
+        # Initialize Stage 1 for the selected tax type
         try:
             if mem:
                 mem.set("stage", "inputs")
@@ -958,12 +1000,12 @@ with gr.Blocks(
         try:
             q = caller._compose_inputs_page(tool_name, {})
         except Exception:
-            q = f"Tax type has been changed to {tool_name} (but the field navigation cannot be loaded; please check TOOL_MAP / tools_registry).）"
+            q = f"Tax type has been changed to {tool_name} (but the field navigation cannot be loaded; please check TOOL_MAP / tools_registry).)"
 
         q = _strip_condition_tuning_tips(q)
         msg = _attach_session_tag(q, session_key)
 
-        # 只顯示第一階段頁面（不保留舊對話）
+        # Show Stage 1 view only (do not keep old conversation)
         new_history = [{"role": "assistant", "content": msg}]
         bundle["awaiting_user"] = {"t0": time.perf_counter(), "agent": "CallerAgent", "phase": "user_wait"}
         return new_history, ""
@@ -980,7 +1022,7 @@ with gr.Blocks(
     msg.submit(on_submit, inputs=[msg, chatbot, show_debug, auto_reset], outputs=[chatbot, msg])
 
     def _attach_quick_pick(btn: gr.Button, tool_name: str):
-        # 直接切到該稅種的『階段一』，不走 LLM 判斷，也不需要先送出訊息
+        # Jump to Stage 1 for that tax type (skip LLM routing; no need to send a message first)
         return btn.click(
             functools.partial(jump_to_tax, tool_name),
             inputs=[chatbot, show_debug, auto_reset],
