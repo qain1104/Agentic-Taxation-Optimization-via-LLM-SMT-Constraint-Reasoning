@@ -1,51 +1,61 @@
 [
   {
     "id": 1,
+    "description": "Securities Transaction Tax — Company-issued stocks & stock-rights certificates",
     "inputs": { "tax_item": "stock", "tp": 8567432.5, "ep": null, "sc": null, "ca": null, "pa": null },
     "expected": 25702.29
   },
   {
     "id": 2,
+    "description": "Securities Transaction Tax — Corporate bonds & other government-approved securities: tax = transaction price (tp) × rate (Note: the site mentions a suspension period for certain bonds, but the calculator still shows the computed amount.)",
     "inputs": { "tax_item": "bond", "tp": 1245678.9, "ep": null, "sc": null, "ca": null, "pa": null },
     "expected": 1245.67
   },
   {
     "id": 3,
+    "description": "Securities Transaction Tax — Government-approved call/put warrants: tax = transaction price (tp) × rate",
     "inputs": { "tax_item": "warrant", "tp": 456789.2, "ep": null, "sc": null, "ca": null, "pa": null },
     "expected": 456.78
   },
   {
     "id": 4,
+    "description": "Securities Transaction Tax — Warrant exercise (stock delivery): tax = exercise price (ep) × shares (sc) × rate",
     "inputs": { "tax_item": "warrant_delivery_stock", "tp": 0, "ep": 156.45, "sc": 3200, "ca": null, "pa": null },
     "expected": 1501.92
   },
   {
     "id": 5,
+    "description": "Securities Transaction Tax — Warrant exercise (cash settlement): tax = exercise price (ep) × shares (sc) × rate",
     "inputs": { "tax_item": "warrant_delivery_cash", "tp": 0, "ep": 78.12, "sc": 15000, "ca": null, "pa": null },
     "expected": 1171.8
   },
   {
     "id": 6,
+    "description": "Futures Transaction Tax — Stock-price futures: tax = contract amount (ca) × rate",
     "inputs": { "tax_item": "stock_index", "ca": 4567890.0, "pa": null, "tp": null, "ep": null, "sc": null },
     "expected": 91.35
   },
   {
     "id": 7,
+    "description": "Futures Transaction Tax — Interest-rate futures (30-day CP interest rate futures): tax = contract amount (ca) × rate",
     "inputs": { "tax_item": "interest_rate_30", "ca": 12345678.0, "pa": null, "tp": null, "ep": null, "sc": null },
     "expected": 1.54
   },
   {
     "id": 8,
+    "description": "Futures Transaction Tax — Interest-rate futures (10-year Taiwan government bond futures): tax = contract amount (ca) × rate",
     "inputs": { "tax_item": "interest_rate_10", "ca": 9876543.0, "pa": null, "tp": null, "ep": null, "sc": null },
     "expected": 12.34
   },
   {
     "id": 9,
+    "description": "Futures Transaction Tax — Options / futures options: tax = premium amount (pa) × rate",
     "inputs": { "tax_item": "option", "ca": 0, "pa": 45678.5, "tp": null, "ep": null, "sc": null },
     "expected": 45.67
   },
   {
     "id": 10,
+    "description": "Futures Transaction Tax — Gold futures: tax = contract amount (ca) × rate",
     "inputs": { "tax_item": "gold", "ca": 2345678.9, "pa": null, "tp": null, "ep": null, "sc": null },
     "expected": 5.86
   }
