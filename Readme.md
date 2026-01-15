@@ -5,7 +5,7 @@ This repository contains the artifact for the ICSE 2026 SEIP paper:
 > **Agentic Taxation Optimization via LLM SMT-Constraint Reasoning**  
 > _ICSE 2026 — Software Engineering in Practice (SEIP)_
 
-The artifact includes the full implementation of the agentic tax optimization system, together with the data and scripts needed to reproduce the main experimental results (RQ1, RQ2, and RQ3).
+The artifact includes the full implementation of the agentic tax optimization system.
 
 > Language Note (Chinese-Only Artifact Interfaces)
 
@@ -45,7 +45,7 @@ Evaluators may use any translation tool (human or machine translation) to unders
 We intend this artifact to qualify for the following ICSE / ACM badges:
 
 - **Artifacts Available**  
-  The full artifact (source code, data, and scripts) will be archived on a long-term repository (e.g., Zenodo) and linked from the camera-ready paper.
+  The full artifact (source code, data, and scripts) will be archived on a long-term repository (Zenodo) and linked from the camera-ready paper.
 
 - **Artifacts Evaluated — Reusable**  
   The artifact is documented and structured to support reuse and extension beyond the paper’s experiments, e.g., adapting the pipeline to other tax regimes or constraint problems.
@@ -304,13 +304,12 @@ The system uses remote LLM and (optionally) integration endpoints:
 
 For artifact evaluation, we provide configuration presets that:
 
-- Disable calls to production government systems.  
-- Either use the LLM API directly or rely on cached responses / stubs when no key is available (see the `rq*` READMEs).
+- Either use the LLM API directly or rely on cached responses / stubs when no key is available.
 
 The exact environment variables are documented in:
 
 - `source_code/Readme.md`, and  
-- `.env.example` next to `source_code/docker-compose.yml` (if provided).
+- `.env.example` next to `source_code/docker-compose.yml`.
 
 ---
 
@@ -321,8 +320,8 @@ The exact environment variables are documented in:
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/<ORG>/<REPO>.git   # TODO: replace with real URL
-cd <REPO>                                      # TODO: replace with real folder name
+git clone https://github.com/qain1104/Agentic-Taxation-Optimization-via-LLM-SMT-Constraint-Reasoning.git
+cd Agentic-Taxation-Optimization-via-LLM-SMT-Constraint-Reasoning
 ```
 
 2. **Enter `source_code/`**
@@ -342,7 +341,7 @@ cp .env.example .env
 Edit `.env` and set at least:
 
 ```text
-OPENAI_API_KEY=your-api-key-here
+OPENAI_API_KEY=your-api-key-here (MOST IMPORTANT THING TO DO TO RUN THE SYSTEM)
 # FIN_BACKEND_BASEURL=http://example-fin-backend:6677
 # TAX_LOG_DIR=/app/logs
 # (Add other variables as needed; see source_code/Readme.md)
