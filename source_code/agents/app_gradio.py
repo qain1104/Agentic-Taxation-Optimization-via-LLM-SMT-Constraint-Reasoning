@@ -1163,23 +1163,23 @@ with gr.Blocks(
                 with gr.Row():
                     show_debug = gr.Checkbox(value=False, label="顯示 DEBUG 區塊")
                     auto_reset = gr.Checkbox(value=True, label="每輪結束自動軟重置（保留續接）")
-                report_fast = gr.Checkbox(value=False, label="快速報告（略過 RAG / early_tips / 縮短建議）")
+                report_fast = gr.Checkbox(value=True, label="快速報告（略過 RAG / early_tips / 縮短建議）")
 
             with gr.Group(elem_classes=["glass-card"]):
                 gr.Markdown("**🧭 請選擇以下稅種 **（點一下自動填入）")
-                ex1 = gr.Button("我想計算綜合所得稅", elem_classes=["example-chip"])
-                ex2 = gr.Button("我想計算外僑所得稅", elem_classes=["example-chip"])
-                ex3 = gr.Button("我想計算營利事業所得稅", elem_classes=["example-chip"])
-                ex4 = gr.Button("我想計算遺產稅", elem_classes=["example-chip"])
-                ex5 = gr.Button("我想計算贈與稅", elem_classes=["example-chip"])
-                ex6 = gr.Button("我想計算加值型營業稅", elem_classes=["example-chip"])
-                ex7 = gr.Button("我想計算非加值型營業稅", elem_classes=["example-chip"])
-                ex8 = gr.Button("我想計算貨物稅", elem_classes=["example-chip"])
-                ex9 = gr.Button("我想計算菸酒稅", elem_classes=["example-chip"])
-                ex10 = gr.Button("我想計算證券交易稅", elem_classes=["example-chip"])
-                ex11 = gr.Button("我想計算期貨交易稅", elem_classes=["example-chip"])
-                ex12 = gr.Button("我想計算特種貨物稅", elem_classes=["example-chip"])
-                ex13 = gr.Button("我想計算特種勞務稅", elem_classes=["example-chip"])
+                ex1 = gr.Button("我想計算綜合所得稅(Click For Income Tax)", elem_classes=["example-chip"])
+                ex2 = gr.Button("我想計算外僑所得稅(Click For Foregin Income Tax)", elem_classes=["example-chip"])
+                ex3 = gr.Button("我想計算營利事業所得稅(Click For Business Income Tax)", elem_classes=["example-chip"])
+                ex4 = gr.Button("我想計算遺產稅(Click For Estate Tax)", elem_classes=["example-chip"])
+                ex5 = gr.Button("我想計算贈與稅(Click For Gift Tax)", elem_classes=["example-chip"])
+                ex6 = gr.Button("我想計算加值型營業稅(Click For VAT Tax)", elem_classes=["example-chip"])
+                ex7 = gr.Button("我想計算非加值型營業稅(Click For NVAT Tax)", elem_classes=["example-chip"])
+                ex8 = gr.Button("我想計算貨物稅(Click For Cargo Tax)", elem_classes=["example-chip"])
+                ex9 = gr.Button("我想計算菸酒稅(Click For Tobacco and alcohol Tax)", elem_classes=["example-chip"])
+                ex10 = gr.Button("我想計算證券交易稅(Click For Securities Transaction Tax)", elem_classes=["example-chip"])
+                ex11 = gr.Button("我想計算期貨交易稅(Click For Futures Transaction Tax)", elem_classes=["example-chip"])
+                ex12 = gr.Button("我想計算特種貨物稅(Click For Speicial Cargo Tax)", elem_classes=["example-chip"])
+                ex13 = gr.Button("我想計算特種勞務稅(Click For Speicial Service Tax)", elem_classes=["example-chip"])
 
             with gr.Accordion("📘 使用說明（點我展開）", open=False, elem_classes=["glass-card"]):
                 gr.Markdown(
