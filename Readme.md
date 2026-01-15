@@ -63,7 +63,132 @@ We intend this artifact to qualify for the following ICSE / ACM badges:
 At the top level, the repository is organized as follows:
 
 ```text
-.
+├── RQ3
+│   ├── llm_web
+│   │   ├── ChatGPT 4o
+│   │   │   ├── q10_4o.pdf
+│   │   │   ├── q11_4o.pdf
+│   │   │   ├── q12_4o.pdf
+│   │   │   ├── q13_4o.pdf
+│   │   │   ├── q14_4o.pdf
+│   │   │   ├── q15_4o.pdf
+│   │   │   ├── q16_4o.pdf
+│   │   │   ├── q17_4o.pdf
+│   │   │   ├── q18_4o.pdf
+│   │   │   ├── q19_4o.pdf
+│   │   │   ├── q1_4o.pdf
+│   │   │   ├── q20_4o.pdf
+│   │   │   ├── q2_4o.pdf
+│   │   │   ├── q3_4o.pdf
+│   │   │   ├── q4_4o.pdf
+│   │   │   ├── q5_4o.pdf
+│   │   │   ├── q6_4o.pdf
+│   │   │   ├── q7_4o.pdf
+│   │   │   ├── q8_4o.pdf
+│   │   │   └── q9_4o.pdf
+│   │   ├── ChatGPT 5.1 Thinking
+│   │   │   ├── q10_5.1thinking.pdf
+│   │   │   ├── q11_5.1thinking.pdf
+│   │   │   ├── q12_5.1thinking.pdf
+│   │   │   ├── q13_5.1thinking.pdf
+│   │   │   ├── q14_5.1thinking.pdf
+│   │   │   ├── q15_5.1thinking.pdf
+│   │   │   ├── q16_5.1thinking.pdf
+│   │   │   ├── q18_5.1thinking.pdf
+│   │   │   ├── q19_5.1thinking.pdf
+│   │   │   ├── q1_5.1thinking.pdf
+│   │   │   ├── q20_5.1thinking.pdf
+│   │   │   ├── q2_5.1thinking.pdf
+│   │   │   ├── q3_5.1thinking.pdf
+│   │   │   ├── q4_5.1thinking.pdf
+│   │   │   ├── q5_5.1thinking.pdf
+│   │   │   ├── q6_5.1thinking.pdf
+│   │   │   ├── q7_5.1thinking.pdf
+│   │   │   ├── q8_5.1thinking.pdf
+│   │   │   └── q9_5.1thinking.pdf
+│   │   ├── ChatGPT 5.2 Thinking
+│   │   │   ├── q10_5.2thinking.pdf
+│   │   │   ├── q11_5.2thinking.pdf
+│   │   │   ├── q12_5.2thinking.pdf
+│   │   │   ├── q13_5.2thinking.pdf
+│   │   │   ├── q14_5.2thinking.pdf
+│   │   │   ├── q15_5.2thinking.pdf
+│   │   │   ├── q16_5.2thinking.pdf
+│   │   │   ├── q18_5.2thinking.pdf
+│   │   │   ├── q19_5.2thinking.pdf
+│   │   │   ├── q1_5.2thinking.pdf
+│   │   │   ├── q20_5.2thinking.pdf
+│   │   │   ├── q2_5.2thinking.pdf
+│   │   │   ├── q3_5.2thinking.pdf
+│   │   │   ├── q4_5.2thinking.pdf
+│   │   │   ├── q5_5.2thinking.pdf
+│   │   │   ├── q6_5.2thinking.pdf
+│   │   │   ├── q7_5.2thinking.pdf
+│   │   │   ├── q8_5.2thinking.pdf
+│   │   │   └── q9_5.2thinking.pdf
+│   │   ├── gemini3_flash_thinking
+│   │   │   ├── q10_gemini3flash.pdf
+│   │   │   ├── q11_gemini3flash.pdf
+│   │   │   ├── q12_gemini3flash.pdf
+│   │   │   ├── q13_gemini3flash.pdf
+│   │   │   ├── q14_gemini3flash.pdf
+│   │   │   ├── q15_gemini3flash.pdf
+│   │   │   ├── q16_gemini3flash.pdf
+│   │   │   ├── q17_gemini3flash.pdf
+│   │   │   ├── q18_gemini3flash.pdf
+│   │   │   ├── q19_gemini3flash.pdf
+│   │   │   ├── q1_gemini3flash.pdf
+│   │   │   ├── q20_gemini3flash.pdf
+│   │   │   ├── q2_gemini3flash.pdf
+│   │   │   ├── q3_gemini3flash.pdf
+│   │   │   ├── q4_gemini3flash.pdf
+│   │   │   ├── q5_gemini3flash.pdf
+│   │   │   ├── q6_gemini3flash.pdf
+│   │   │   ├── q7_gemini3flash.pdf
+│   │   │   ├── q8_gemini3flash.pdf
+│   │   │   └── q9_gemini3flash.pdf
+│   │   └── gemini3_pro
+│   │       ├── q10_gemini3pro.pdf
+│   │       ├── q11_gemini3pro.pdf
+│   │       ├── q12_gemini3pro.pdf
+│   │       ├── q13_gemini3pro.pdf
+│   │       ├── q14_gemini3pro.pdf
+│   │       ├── q15_gemini3pro.pdf
+│   │       ├── q16_gemini3pro.pdf
+│   │       ├── q17_gemini3pro.pdf
+│   │       ├── q18_gemini3pro.pdf
+│   │       ├── q19_gemini3pro.pdf
+│   │       ├── q1_gemini3pro.pdf
+│   │       ├── q20_gemini3pro.pdf
+│   │       ├── q2_gemini3pro.pdf
+│   │       ├── q3_gemini3pro.pdf
+│   │       ├── q4_gemini3pro.pdf
+│   │       ├── q5_gemini3pro.pdf
+│   │       ├── q6_gemini3pro.pdf
+│   │       ├── q7_gemini3pro.pdf
+│   │       ├── q8_gemini3pro.pdf
+│   │       └── q9_gemini3pro.pdf
+│   └── our_system
+│       ├── q1.txt
+│       ├── q10.txt
+│       ├── q11.txt
+│       ├── q12.txt
+│       ├── q13.txt
+│       ├── q14.txt
+│       ├── q15.txt
+│       ├── q16.txt
+│       ├── q17.txt
+│       ├── q18.txt
+│       ├── q19.txt
+│       ├── q2.txt
+│       ├── q20.txt
+│       ├── q3.txt
+│       ├── q4.txt
+│       ├── q5.txt
+│       ├── q6.txt
+│       ├── q7.txt
+│       ├── q8.txt
+│       └── q9.txt
 ├── Readme.md
 └── source_code
     ├── Dockerfile
@@ -200,6 +325,8 @@ At the top level, the repository is organized as follows:
         ├── tobacco_alcohol_tax.py
         └── util.py 
 ```
+### `RQ3/`
+This folder contains all the records and documentation related to our RQ3.
 
 ### `source_code/`
 
