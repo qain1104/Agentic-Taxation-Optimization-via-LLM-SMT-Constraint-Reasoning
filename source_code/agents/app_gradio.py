@@ -1153,8 +1153,8 @@ with gr.Blocks(
                 lines=2,
             )
             with gr.Row():
-                send = gr.Button("🚀 送出", variant="primary")
-                clear = gr.Button("🧹 清空輸入/對話（硬重置）")
+                send = gr.Button("🚀 送出(Send)", variant="primary")
+                clear = gr.Button("🧹 清空輸入/對話（Reset）")
                 clear.click(_on_hard_reset, inputs=None, outputs=[chatbot, msg], queue=False)
 
         with gr.Column(scale=5):

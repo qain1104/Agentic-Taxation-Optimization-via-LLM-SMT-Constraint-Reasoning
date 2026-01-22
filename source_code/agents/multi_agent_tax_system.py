@@ -878,6 +878,7 @@ class CallerAgent(BaseAgent):
 
         lines = [f"### 目前稅種：{meta.get('description', tool_name)}"]
         lines.append("階段一、請輸入你計算輸入稅額的稅務狀態，若未提供數值，系統將自動以 0 或 否 代入")
+        lines.append("Phase 1: Please provide your tax-related inputs. If not provided, the system will default to 0 or No.")
         if required:
             lines.append("**可輸入的基礎欄位**")
             lines += [f"- {_lab(k)}（`{k}`）" for k in required]
@@ -895,6 +896,8 @@ class CallerAgent(BaseAgent):
         header = self._fmt_vars_overview(tool_name)
         preview = self._inline_current_inputs(tool_name, merged_slots)
         tail = "\n\n> 若要再加變數，直接輸入；若完成設定，回覆「下一步」；若要直接計算，回覆「直接計算」。"
+        tail_en = "\n\n> To add more variables, just input them; to finish setting, reply 'next step'; to compute directly, reply 'compute now'."
+        tail += tail_en
         # 插入階段一規則說明
         rules = "\n\n" + RULES_NOTE_STAGE1
         return header + ("\n\n" + preview if preview else "") + rules + tail
@@ -926,6 +929,7 @@ class CallerAgent(BaseAgent):
         lines: List[str] = []
         if basics:
             lines.append("——\n**目前已收到的輸入**")
+            lines.append("-\n**received inputs so far**")
             for k, v in basics:
                 lines.append(f"- {_lab(k)}：{_fmt_val(v)}")
 
@@ -940,6 +944,7 @@ class CallerAgent(BaseAgent):
                 if all(k != budget_key for k, _ in basics):
                     if not lines:
                         lines.append("——\n**目前已收到的輸入**")
+                        lines.append("-\n**received inputs so far**")
                     lines.append(f"- {_lab(budget_key)}：{_fmt_val(bud_val)}")
 
         return "\n".join(lines)
@@ -2952,6 +2957,8 @@ class ConstraintAgent(BaseAgent):
         self.memory.set("pending_tool_for_constraints", tool)
 
         header = "階段二、請依照你的稅務狀態輸入欲設定條件（完成後會先進入「最終確認」再開始計算）"
+        header_en = "Step 2: Please input the constraints according to your tax situation (you will enter 'final confirmation' before starting the calculation). "
+        header.append(header_en)
         params_md = self._fmt_params_preview(tool, payload)
 
         tips = payload.get("early_tips_md")
@@ -3027,6 +3034,7 @@ class ConstraintAgent(BaseAgent):
             self.memory.set("pending_tool_for_constraints", tool)
 
             header = "階段二、請依照你的稅務狀態輸入欲設定條件（完成後會先進入「最終確認」再開始計算）"
+            header += "Step 2: Please input the constraints according to your tax situation (you will enter 'final confirmation' before starting the calculation). "
             params_md = self._fmt_params_preview(tool, payload)
 
             tips = payload.get("early_tips_md")
@@ -3096,6 +3104,7 @@ class ConstraintAgent(BaseAgent):
                     "已為你清空所有條件，回到條件設定階段。\n\n"
                     f"{params_md}\n\n{howto_md}\n\n{preview_md}\n\n{tips_md}\n\n"
                     "接下來若要重新加入條件，直接輸入；若完成設定，回覆「下一步」。"
+                    "if you want to add new conditions, just type them in; if you are done setting conditions, reply '下一步'."
                 )
                 return {
                     "type": "follow_up",
@@ -3155,9 +3164,11 @@ class ConstraintAgent(BaseAgent):
 
                 confirm_text = (
                     "### 第三階段、執行前最終確認\n"
+                    "### Phase3 : Final Confirmation Before Execution\n"
                     "目前處於最終確認頁。請輸入「下一步」開始計算，或輸入「返回」回到條件頁繼續調整。\n\n"
                     f"{params_md}\n\n{preview_md}\n\n{tips_md}\n\n"
                     "可用指令：『下一步』開始、或『返回』回到條件頁。"
+                    " You can type '下一步' to start execution, or '返回' to return to the constraints page."
                 )
 
                 return {
@@ -3176,9 +3187,12 @@ class ConstraintAgent(BaseAgent):
                 tips_md = await self._condition_refiner_tips(tool, payload)
                 confirm_text = (
                     "### 第三階段、執行前最終確認\n"
+                    "### Phase3 : Final Confirmation Before Execution\n"
                     "以下是你目前的**輸入與條件**：\n\n"
+                    "below are your current **inputs and constraints**:\n\n"
                     f"{params_md}\n\n{preview_md}\n\n{tips_md}\n\n"
                     "回覆「下一步」開始計算；回覆「返回」可回到條件頁繼續調整；若要清空所有條件重新設定，可輸入「重設條件」。"
+                    "reply '下一步' to start execution; reply '返回' to return to the constraints page to make adjustments; to reset all constraints, type '重設條件'."
                 )
                 return {"type":"follow_up","stage":"pre_execute_review","tool_name":tool,"question":confirm_text}
 
@@ -3196,6 +3210,8 @@ class ConstraintAgent(BaseAgent):
                         f"{preview_md}\n\n{tips_md}\n\n"
                         "若要再加條件，直接輸入；若完成設定，回覆「下一步」。\n"
                         "若要清空所有條件重新設定，輸入「重設條件」。"
+                        "If you want to add more conditions, just type them in; if you are done setting conditions, reply '下一步'."
+                        "If you want to reset all constraints, type '重設條件'."
                     ),
                     "debug": dbg,
                 }
