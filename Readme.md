@@ -132,6 +132,12 @@ Then type and send:
 
 #### Phase 3 — Calculation & report generation
 
+The system will enter the Phase3 : Final Confirmation Before Execution
+
+Then type and send:
+
+> 下一步
+
 Wait for the system to generate an optimization result and a report.
 
 **UI success criteria:**  

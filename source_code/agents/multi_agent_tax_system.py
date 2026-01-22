@@ -896,7 +896,7 @@ class CallerAgent(BaseAgent):
         header = self._fmt_vars_overview(tool_name)
         preview = self._inline_current_inputs(tool_name, merged_slots)
         tail = "\n\n> 若要再加變數，直接輸入；若完成設定，回覆「下一步」；若要直接計算，回覆「直接計算」。"
-        tail_en = "\n\n> To add more variables, just input them; to finish setting, reply 'next step'; to compute directly, reply 'compute now'."
+        tail_en = "\n\n> To add more variables, just input them; to finish setting, reply '下一步'; to compute directly, reply '直接計算'"
         tail += tail_en
         # 插入階段一規則說明
         rules = "\n\n" + RULES_NOTE_STAGE1
