@@ -14,9 +14,9 @@ The primary focus is to ensure functional completeness and ease of execution for
 ### Major Changes & Fixes
 
 - **[Documentation]** Added a comprehensive, step-by-step `README.md` covering system requirements, installation, and end-to-end execution.
-- **[Testing]** Introduced a **Minimal Functional Test** workflow intended to complete within **≤10 minutes** *after the Docker image is built*.
+- **[Testing]** Provided a **Minimal Functional Test** workflow intended to complete within **≤10 minutes (excluding Docker build time)**.
 - **[Environment]** Documented dependency configuration (Docker-first), Python base image version, and SMT solver usage.
-- **[Transparency]** Documented expected outputs and added a troubleshooting section for common LLM API and runtime issues.
+- **[Transparency]** Documented expected outputs (incl. a deterministic `ae_outputs/` folder) and added a troubleshooting section for common LLM API and runtime issues.
 - **[Legal]** Included clear license information (MIT) in the root directory and Zenodo metadata.
 
 **How to verify:** Follow the **Linear walkthrough** section below to run the end-to-end workflow and confirm outputs.
@@ -135,34 +135,79 @@ Then type and send:
 Wait for the system to generate an optimization result and a report.
 
 **UI success criteria:**  
-- a generated result/report is displayed in the UI (Markdown-like text is acceptable), and  
-- logs and/or report artifacts are written under `source_code/logs/` and/or `source_code/reports/` (see below).
+- a generated result/report is displayed in the UI (Markdown-like text is acceptable)
 
 ---
 
 ## Expected outputs (what to look for)
 
-Because this artifact is UI-driven, filenames may vary by configuration.
-We define an **authoritative verification procedure**:
+This artifact is UI-driven and may produce different filenames across configurations.  
+To avoid guesswork, **the Minimal Functional Test defines deterministic outputs under `ae_outputs/`**.
 
-After completing the UI test case once, run:
+### Outputs produced by the Minimal Functional Test helper
+
+Run (from the artifact root; see below):
 
 ```bash
-# show recent files (modified within the last ~10 minutes)
-find source_code -maxdepth 5 -type f -mmin -10 | sort
-
-# common output folders
-find source_code -maxdepth 5 -type f | grep -E "reports|output|outputs|logs|artifacts" | sort | head -n 200
+bash scripts/minimal_functional_test.sh
 ```
 
-### Typical output locations
+This creates (or updates) a folder `ae_outputs/` in the artifact root:
 
-- **Logs:** `source_code/logs/` (e.g., `tax_app.log`)
-- **Reports / artifacts:** `source_code/reports/` (report files and/or JSON records depending on configuration)
+```text
+ae_outputs/
+  ├── openapi.json
+  ├── docker_logs_tail.txt
+  ├── recent_files.txt
+  └── common_outputs.txt
+```
 
-**Functional success criteria (files):**
-- at least one file under `source_code/logs/` is updated during the run, and  
-- at least one new/updated artifact appears under `source_code/reports/` (if report export is enabled in your configuration).
+**Meaning of each file:**
+- `openapi.json`: captured OpenAPI spec, proving the service is reachable and responding.
+- `docker_logs_tail.txt`: last 200 lines of service logs for debugging and verification.
+- `recent_files.txt`: files under `source_code/` modified in the last ~10 minutes after the UI run.
+- `common_outputs.txt`: a best-effort listing of files under common output folders (logs/reports/outputs).
+
+**Functional success criteria (outputs):**
+1) `ae_outputs/openapi.json` exists and is non-empty; and  
+2) `ae_outputs/docker_logs_tail.txt` contains recent runtime logs (timestamped lines from uvicorn/gradio); and  
+3) At least one of the following holds:
+   - `ae_outputs/recent_files.txt` lists files under `source_code/logs/` updated during the run, **or**
+   - the UI shows the final report/result in Phase 3 (manual check).
+
+### Typical application output locations (if enabled in your configuration)
+
+When file logging/report persistence is enabled, you should additionally see outputs under:
+
+- **Logs:** `source_code/logs/` (e.g., `*.log`)
+- **Reports / artifacts:** `source_code/reports/` (e.g., `*.md`, `*.json`)
+
+If your deployment does not persist reports to disk, the UI display + `ae_outputs/` artifacts remain the authoritative success signal for AE Functional.
+
+---
+
+## Execution time & resource expectations
+
+Measured/estimated for a typical laptop/desktop with Docker installed (no GPU required).
+
+### Typical runtime (approx.)
+
+| Step | Typical time | Notes |
+|---|---:|---|
+| `docker compose build` (first time) | ~10 min | dependency download + image build |
+| `docker compose up` → ready | ~30–90 sec | until `/openapi.json` responds |
+| Minimal Functional Test (UI run) | ~2–8 min | depends mainly on LLM latency/rate limits |
+| `bash scripts/minimal_functional_test.sh` | ≤10 min | excludes Docker build time |
+
+> If you want to record your machine’s exact numbers, run:
+> - `time docker compose build`
+> - `time curl -sSf http://localhost:32770/openapi.json >/dev/null`
+
+### Resource usage (approx.)
+
+- **CPU:** 1–2 cores during normal serving; can spike during startup/build
+- **RAM:** 2–4 GB typical (8 GB recommended for comfort)
+- **Disk:** 3–6 GB (Docker image layers + temporary build cache)
 
 ---
 
@@ -206,22 +251,23 @@ find source_code -maxdepth 5 -type f | grep -E "reports|output|outputs|logs|arti
 7. `curl -sSf http://localhost:32770/openapi.json >/dev/null && echo "OK"`  
 8. Open `http://localhost:32770`  
 9. Run the “Income tax” UI test case (Step 0 → Phase 1 → 下一步 → Phase 2 → 下一步 → Phase 3)  
-10. Inspect outputs under `source_code/logs/` and `source_code/reports/` using the commands in **Expected outputs**
+10. In the artifact root (one level above `source_code/`), run `bash scripts/minimal_functional_test.sh`  
+11. Inspect `ae_outputs/` and (optionally) `source_code/logs/`, `source_code/reports/`
 
 ---
 
 ## Minimal Functional Test suite (scripted helper)
 
-A small helper script is provided to:
-- wait for the service to become ready, and
-- guide the evaluator through the UI test, then
-- print recently modified files under `logs/` and `reports/`.
-
-Run (in `source_code/`):
+Run this from the **artifact root** (the folder that contains `source_code/` and `scripts/`):
 
 ```bash
-bash ../scripts/minimal_functional_test.sh
+bash scripts/minimal_functional_test.sh
 ```
+
+It will:
+- wait for the service liveness endpoint (`/openapi.json`),
+- guide you through the UI income-tax example,
+- and save AE-verification artifacts under `ae_outputs/`.
 
 ---
 
@@ -232,27 +278,34 @@ bash ../scripts/minimal_functional_test.sh
 - Cause: `.env` not created or key not set
 - Fix: ensure `source_code/.env` contains `OPENAI_API_KEY=...`, then restart `docker compose up`
 
-2) **Connection reset by peer / service restarts**
+2) **External Docker network missing (older versions)**
+- Symptom: `network fin-network declared as external, but could not be found`
+- Cause: an older `docker-compose.yml` referenced an external network not present on the host
+- Fix (old versions only): `docker network create fin-network`, then re-run compose  
+  *(Current Zenodo version removes this external network requirement.)*
+
+3) **Connection reset by peer / service restarts**
 - Symptom: `curl: (56) Recv failure: Connection reset by peer` or the UI disconnects
 - Likely cause: backend crashed and is restarting (missing env vars, dependency error, runtime exception)
 - Fix:
   ```bash
+  cd source_code
   docker compose logs --tail=200
   docker compose down
   docker compose up --build
   ```
 
-3) **Port `32770` already in use**
+4) **Port `32770` already in use**
 - Symptom: Docker cannot bind to `0.0.0.0:32770`
 - Cause: another process is using the port
 - Fix: stop the conflicting process, or change the host port mapping in `docker-compose.yml`
 
-4) **LLM request failures (rate limit / model not found / network)**
+5) **LLM request failures (rate limit / model not found / network)**
 - Symptom: UI shows API errors or timeouts
 - Cause: API rate limit, invalid model configuration, or network instability
 - Fix: retry, verify `.env` model settings (if present), and confirm internet access
 
-5) **SMT / Z3 errors (local mode)**
+6) **SMT / Z3 errors (local mode)**
 - Symptom: import errors if running outside Docker
 - Cause: missing `z3-solver` dependency
 - Fix: `pip install z3-solver` (Docker path already includes it)
@@ -261,21 +314,33 @@ bash ../scripts/minimal_functional_test.sh
 
 ## Artifact–paper alignment
 
-This artifact demonstrates the paper’s end-to-end workflow and experiment pipelines.
+This artifact directly corresponds to the workflow and evaluation in the paper:
 
-- **Running example (Minimal Functional Test):**
-  - Paper: Section “Agentic Orchestration” → “A Running Example on Income Tax Optimization” (`\label{sec:running-example}`)
-  - Figure: “End-to-end income tax optimization” (`\label{fig:income-demo}`)
-  - Artifact: Gradio UI workflow with “所得稅” + “下一步” phases
+- **End-to-end workflow overview (Paper Figure 1):**  
+  The paper’s full pipeline—LLM-assisted constraint-code synthesis + portal validation (upper panel), then agentic optimization using verified Z3 code (lower panel)—is implemented in the artifact’s `source_code/` service.
 
-- **RQ1: Constraint Code Synthesis** (`\label{sec:rqs}`): code synthesis / repair pipeline
-- **RQ2: Portal-aligned verification** (`\label{sec:rqs}`): author-generated Selenium validation records
-- **RQ3: Optimizing Real-World Tax Decisions** (`\label{sec:rq3}`): records and documentation in the archive
+- **Running example (Paper Section 4.3, Figure 3):**  
+  The Minimal Functional Test follows the same interaction pattern as the paper’s income-tax running example: select a tax module → fill missing fields → specify (optional) constraints/free variables → generate an auditable optimization report.  
+  This is exactly what the Gradio UI demonstrates in Step 0 + Phase 1–3 in this README.
 
-### Limitations
+- **RQ1 — Constraint Code Synthesis (Paper Section 5.4):**  
+  Implementation and records for the constraint synthesis/repair workflow are included under:
+  - `source_code/code_synthesis/` (codegen + repair pipeline; detailed docs inside that folder)
 
-For AE Functional, this release prioritizes a minimal end-to-end UI demonstration of the workflow.
-Full-scale reproduction of all experimental tables may require longer runtimes and additional compute/API budget.
+- **RQ2 — Portal-aligned verification (Paper Section 5.5):**  
+  Author-generated Selenium oracle validation records and reproduction notes are included under:
+  - `source_code/selenium_test_records/` (Selenium records/logs and scripts)
+
+- **RQ3 — Real-world optimization tasks (Paper Section 5.6):**  
+  Task records and supporting material are included under:
+  - `RQ3/`
+
+### Limitations (what is and isn’t reproduced for AE Functional)
+
+- **External dependency:** The functional pipeline requires internet access and a valid `OPENAI_API_KEY` (no offline mode in this release).
+- **Scope for AE Functional:** The Minimal Functional Test demonstrates the end-to-end workflow on one representative scenario (income tax UI run).  
+  Reproducing all RQ1/RQ2/RQ3 tables end-to-end is possible with the included materials, but may require additional runtime and LLM/API budget beyond the quick AE Functional check.
+- **Selenium/portal verification:** Full RQ2 reproduction may require a browser runtime and stable access to the MoF portal, which can be sensitive to network conditions and portal updates.
 
 ---
 
