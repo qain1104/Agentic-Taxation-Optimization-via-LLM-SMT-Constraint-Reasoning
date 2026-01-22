@@ -1,637 +1,284 @@
-# Agentic Taxation Optimization via LLM SMT-Constraint Reasoning — Artifact
+# Agentic Taxation Optimization via LLM SMT-Constraint Reasoning — ICSE 2026 Artifact (Paper #127)
 
-This repository contains the artifact for the ICSE 2026 SEIP paper:
-
-> **Agentic Taxation Optimization via LLM SMT-Constraint Reasoning**  
-> _ICSE 2026 — Software Engineering in Practice (SEIP)_
-
-The artifact includes the full implementation of the agentic tax optimization system.
-
-> Language Note (Chinese-Only Artifact Interfaces)
-
-Important: This artifact is Chinese-first.
-
-The interactive system UI, example prompts, RQ1/RQ2/RQ3 task descriptions, and the LLM baseline prompts used in our experiments were written and executed in Traditional Chinese.
-
-All runtime interaction with the agentic service (both Gradio UI and the FastAPI /run endpoint) expects Chinese natural-language inputs for user queries (unless you directly call a calculator tool with structured parameters).
-
-What this means for artifact evaluators
-
-If you are not fluent in Chinese, you can still reproduce our experiments by translating the provided Chinese prompts/tasks into English (or your preferred language).
-However, translation is performed by the evaluator and is not included as part of this artifact, and translation choices may introduce minor semantic differences (e.g., tax terms, constraint wording, or intent strength such as “must” vs “should”).
-
-Recommended translation practice
-
-To reduce ambiguity and preserve reproducibility:
-
-Translate conservatively (literal over creative). Keep numbers, entity names, and constraint bounds unchanged.
-
-Do not paraphrase tax/legal terms unless necessary. If unsure, keep the Chinese term and add an English gloss, e.g.,
-“標準扣除額 (standard deduction)”, “薪資所得 (salary income)”.
-
-Keep an explicit record of translation:
-
-Save the translated prompt alongside the original Chinese prompt (e.g., task_07.zh.txt + task_07.en.txt).
-
-When reporting results, cite which version was used.
-
-Optional helper (out of scope for evaluation)
-
-Evaluators may use any translation tool (human or machine translation) to understand prompts and reports, but we do not require or provide a specific translation pipeline for badge evaluation. The artifact’s primary claim is that the system and baselines were evaluated under Chinese prompts, matching the original deployment context.
----
-
-## Badges & Scope
-
-We intend this artifact to qualify for the following ICSE / ACM badges:
-
-- **Artifacts Available**  
-  The full artifact (source code, data, and scripts) will be archived on a long-term repository (Zenodo) and linked from the camera-ready paper.
-
-- **Artifacts Evaluated — Reusable**  
-  The artifact is documented and structured to support reuse and extension beyond the paper’s experiments, e.g., adapting the pipeline to other tax regimes or constraint problems.
-
-**Provenance**
-
-- Paper: _Agentic Taxation Optimization via LLM SMT-Constraint Reasoning_ (ICSE 2026 SEIP).  
-- Preprint: <!-- TODO: add arXiv / institutional link if available -->  
-- Archived artifact DOI: https://doi.org/10.5281/zenodo.18182268
+**Zenodo DOI:** https://doi.org/10.5281/zenodo.18182268  
+**Requested badge:** **Artifacts Evaluated – Functional** *(and Artifacts Available)*  
+**Code license:** **MIT License** (Zenodo metadata set to MIT; `LICENSE` included in the archive)
 
 ---
 
-## Repository Layout
+## Release Notes: ICSE 2026 Artifact Evaluation Update
 
-At the top level, the repository is organized as follows:
+This release addresses the documentation and packaging requirements requested by the AE reviewers for Paper #127.
+The primary focus is to ensure functional completeness and ease of execution for the **Artifacts Evaluated – Functional** badge.
 
-```text
-├── RQ3
-│   ├── llm_web
-│   │   ├── ChatGPT 4o
-│   │   │   ├── q10_4o.pdf
-│   │   │   ├── q11_4o.pdf
-│   │   │   ├── q12_4o.pdf
-│   │   │   ├── q13_4o.pdf
-│   │   │   ├── q14_4o.pdf
-│   │   │   ├── q15_4o.pdf
-│   │   │   ├── q16_4o.pdf
-│   │   │   ├── q17_4o.pdf
-│   │   │   ├── q18_4o.pdf
-│   │   │   ├── q19_4o.pdf
-│   │   │   ├── q1_4o.pdf
-│   │   │   ├── q20_4o.pdf
-│   │   │   ├── q2_4o.pdf
-│   │   │   ├── q3_4o.pdf
-│   │   │   ├── q4_4o.pdf
-│   │   │   ├── q5_4o.pdf
-│   │   │   ├── q6_4o.pdf
-│   │   │   ├── q7_4o.pdf
-│   │   │   ├── q8_4o.pdf
-│   │   │   └── q9_4o.pdf
-│   │   ├── ChatGPT 5.1 Thinking
-│   │   │   ├── q10_5.1thinking.pdf
-│   │   │   ├── q11_5.1thinking.pdf
-│   │   │   ├── q12_5.1thinking.pdf
-│   │   │   ├── q13_5.1thinking.pdf
-│   │   │   ├── q14_5.1thinking.pdf
-│   │   │   ├── q15_5.1thinking.pdf
-│   │   │   ├── q16_5.1thinking.pdf
-│   │   │   ├── q18_5.1thinking.pdf
-│   │   │   ├── q19_5.1thinking.pdf
-│   │   │   ├── q1_5.1thinking.pdf
-│   │   │   ├── q20_5.1thinking.pdf
-│   │   │   ├── q2_5.1thinking.pdf
-│   │   │   ├── q3_5.1thinking.pdf
-│   │   │   ├── q4_5.1thinking.pdf
-│   │   │   ├── q5_5.1thinking.pdf
-│   │   │   ├── q6_5.1thinking.pdf
-│   │   │   ├── q7_5.1thinking.pdf
-│   │   │   ├── q8_5.1thinking.pdf
-│   │   │   └── q9_5.1thinking.pdf
-│   │   ├── ChatGPT 5.2 Thinking
-│   │   │   ├── q10_5.2thinking.pdf
-│   │   │   ├── q11_5.2thinking.pdf
-│   │   │   ├── q12_5.2thinking.pdf
-│   │   │   ├── q13_5.2thinking.pdf
-│   │   │   ├── q14_5.2thinking.pdf
-│   │   │   ├── q15_5.2thinking.pdf
-│   │   │   ├── q16_5.2thinking.pdf
-│   │   │   ├── q18_5.2thinking.pdf
-│   │   │   ├── q19_5.2thinking.pdf
-│   │   │   ├── q1_5.2thinking.pdf
-│   │   │   ├── q20_5.2thinking.pdf
-│   │   │   ├── q2_5.2thinking.pdf
-│   │   │   ├── q3_5.2thinking.pdf
-│   │   │   ├── q4_5.2thinking.pdf
-│   │   │   ├── q5_5.2thinking.pdf
-│   │   │   ├── q6_5.2thinking.pdf
-│   │   │   ├── q7_5.2thinking.pdf
-│   │   │   ├── q8_5.2thinking.pdf
-│   │   │   └── q9_5.2thinking.pdf
-│   │   ├── gemini3_flash_thinking
-│   │   │   ├── q10_gemini3flash.pdf
-│   │   │   ├── q11_gemini3flash.pdf
-│   │   │   ├── q12_gemini3flash.pdf
-│   │   │   ├── q13_gemini3flash.pdf
-│   │   │   ├── q14_gemini3flash.pdf
-│   │   │   ├── q15_gemini3flash.pdf
-│   │   │   ├── q16_gemini3flash.pdf
-│   │   │   ├── q17_gemini3flash.pdf
-│   │   │   ├── q18_gemini3flash.pdf
-│   │   │   ├── q19_gemini3flash.pdf
-│   │   │   ├── q1_gemini3flash.pdf
-│   │   │   ├── q20_gemini3flash.pdf
-│   │   │   ├── q2_gemini3flash.pdf
-│   │   │   ├── q3_gemini3flash.pdf
-│   │   │   ├── q4_gemini3flash.pdf
-│   │   │   ├── q5_gemini3flash.pdf
-│   │   │   ├── q6_gemini3flash.pdf
-│   │   │   ├── q7_gemini3flash.pdf
-│   │   │   ├── q8_gemini3flash.pdf
-│   │   │   └── q9_gemini3flash.pdf
-│   │   └── gemini3_pro
-│   │       ├── q10_gemini3pro.pdf
-│   │       ├── q11_gemini3pro.pdf
-│   │       ├── q12_gemini3pro.pdf
-│   │       ├── q13_gemini3pro.pdf
-│   │       ├── q14_gemini3pro.pdf
-│   │       ├── q15_gemini3pro.pdf
-│   │       ├── q16_gemini3pro.pdf
-│   │       ├── q17_gemini3pro.pdf
-│   │       ├── q18_gemini3pro.pdf
-│   │       ├── q19_gemini3pro.pdf
-│   │       ├── q1_gemini3pro.pdf
-│   │       ├── q20_gemini3pro.pdf
-│   │       ├── q2_gemini3pro.pdf
-│   │       ├── q3_gemini3pro.pdf
-│   │       ├── q4_gemini3pro.pdf
-│   │       ├── q5_gemini3pro.pdf
-│   │       ├── q6_gemini3pro.pdf
-│   │       ├── q7_gemini3pro.pdf
-│   │       ├── q8_gemini3pro.pdf
-│   │       └── q9_gemini3pro.pdf
-│   └── our_system
-│       ├── q1.txt
-│       ├── q10.txt
-│       ├── q11.txt
-│       ├── q12.txt
-│       ├── q13.txt
-│       ├── q14.txt
-│       ├── q15.txt
-│       ├── q16.txt
-│       ├── q17.txt
-│       ├── q18.txt
-│       ├── q19.txt
-│       ├── q2.txt
-│       ├── q20.txt
-│       ├── q3.txt
-│       ├── q4.txt
-│       ├── q5.txt
-│       ├── q6.txt
-│       ├── q7.txt
-│       ├── q8.txt
-│       └── q9.txt
-├── Readme.md
-└── source_code
-    ├── Dockerfile
-    ├── Readme.md
-    ├── __pycache__
-    ├── agents
-    │   ├──  __init__.py
-    │   ├── app_gradio.py
-    │   ├── integrations
-    │   │   ├── __pycache__
-    │   │   │   └── fintax_api.cpython-311.pyc
-    │   │   └── fintax_api.py
-    │   ├── logs
-    │   │   └── tax_app.log
-    │   ├── lt_memory.json
-    │   ├── multi_agent_tax_system.py
-    │   ├── parsers
-    │   │   ├── cargo_nl_parser.py
-    │   │   ├── futures_nl_parser.py
-    │   │   ├── nvat_nl_parser.py
-    │   │   ├── securities_nl_parser.py
-    │   │   ├── special_goods_nl_parser.py
-    │   │   ├── ta_nl_parser.py
-    │   │   └── vat_nl_parser.py
-    │   ├── rag
-    │   │   ├── README.md
-    │   │   ├── chroma
-    │   │   ├── ingest_pdfs.py
-    │   │   ├── ingest_urls.py
-    │   │   ├── pdfs
-    │   │   │   ├── 114年貨物稅節稅手冊(PDF檔).pdf
-    │   │   │   ├── 114年營利事業所得稅-節稅手冊.pdf
-    │   │   │   ├── Readme.md
-    │   │   │   ├── 國稅節稅手冊.pdf
-    │   │   │   ├── 菸酒稅節稅手冊(PDF).pdf
-    │   │   │   ├── 營業稅節稅手冊.pdf
-    │   │   │   ├── 期貨交易稅節稅手冊_(1).pdf
-    │   │   │   └── 證券交易稅節稅手冊_(1).pdf
-    │   │   ├── test_search.py
-    │   │   ├── tools
-    │   │   │   └── clear_index.py
-    │   │   └── urls.txt
-    │   ├── report_renderer.py
-    │   ├── reports
-    │   │   └── last_run
-    │   └── tools_registry.py
-    ├── app.py
-    ├── code_synthesis
-    │   ├── Readme.md
-    │   ├── chroma
-    │   ├── generated_tax_solver.py
-    │   ├── inputs
-    │   │   ├── business_income.txt
-    │   │   ├── business_tax.txt
-    │   │   ├── cargo_tax.txt
-    │   │   ├── estate_input.txt
-    │   │   ├── foreign_income_tax.txt
-    │   │   ├── gift_tax_input.txt
-    │   │   ├── income_tax.txt
-    │   │   ├── security_futures.txt
-    │   │   ├── special_goods_services.txt
-    │   │   └── ta_tax.txt
-    │   ├── json_and_csv
-    │   │   ├── all_laws.csv
-    │   │   └── all_laws.json
-    │   ├── protal_samples
-    │   │   └── income_tax_samples.json ...
-    │   ├── refs
-    │   │   └── 114_numbers.txt
-    │   ├── runs
-    │   ├── tax_agent_pipeline.py
-    │   └── taxrag
-    │       ├── __init__.py
-    │       ├── __main__.py
-    │       ├── chroma_store.py
-    │       ├── config.py
-    │       ├── documents
-    │       │   ├── 所得稅法.pdf
-    │       │   ├── 菸酒稅法.pdf
-    │       │   ├── 期貨交易法.pdf
-    │       │   ├── 證券交易法.pdf
-    │       │   ├── 貨物稅條例.pdf
-    │       │   ├── 期貨交易稅條例.pdf
-    │       │   ├── 證券交易稅條例.pdf
-    │       │   ├── 遺產及贈與稅法.pdf
-    │       │   ├── 所得基本稅額條例.pdf
-    │       │   ├── 所得稅法施行細則.pdf
-    │       │   ├── 期貨交易法施行細則.pdf
-    │       │   ├── 證券交易法施行細則.pdf
-    │       │   ├── 特種貨物及勞務稅條例.pdf
-    │       │   ├── 營利事業所得稅查核準則.pdf
-    │       │   ├── 遺產及贈與稅法施行細則.pdf
-    │       │   ├── 加值型及非加值型營業稅法.pdf
-    │       │   ├── 特種貨物及勞務稅條例施行細則.pdf
-    │       │   ├── 加值型及非加值型營業稅法施行細則.pdf
-    │       │   └── 特種貨物及勞務稅稅課收入分配及運用辦法.pdf
-    │       ├── pdf_ingest.py
-    │       ├── readme.md
-    │       ├── requirements.txt
-    │       ├── structure.py
-    │       └── ui.py
-    ├── docker-compose.yml
-    ├── json_and_csv
-    │   ├── all_laws.csv
-    │   └── all_laws.json
-    ├── requirements.txt
-    ├── selenium_test_records
-    │   ├── 01.綜合所得稅income_tax.ipynb
-    │   ├── 02.外僑稅額試算_foregin_income_tax.ipynb
-    │   ├── 03.營利事業所得稅_enterprise_income.ipynb
-    │   ├── 04.營業稅_business_tax.ipynb
-    │   ├── 05.貨物稅_cargo_tax.ipynb
-    │   ├── 06.菸酒稅_ta_tax.ipynb
-    │   ├── 07.遺產稅_estate_tax.ipynb
-    │   ├── 08.贈與稅_gift_tax.ipynb
-    │   ├── 09.證交期交稅_security_futures.ipynb
-    │   ├── 10.特種貨物及勞務稅_special_services_goods.ipynb
-    │   └── Readme.md
-    └── tax_calculators
-        ├── __init__.py
-        ├── business_income_tax.py
-        ├── cargo_tax.py
-        ├── constraint_utils.py
-        ├── estate_tax.py
-        ├── foreigner_income_tax.py
-        ├── gift_tax.py
-        ├── high_consumption_goods_and_services_tax.py
-        ├── income_tax.py
-        ├── main.py
-        ├── sale_tax.py
-        ├── securities_and_futures_transaction_tax.py
-        ├── special_tax.py
-        ├── tax_calculator.py
-        ├── tobacco_alcohol_tax.py
-        └── util.py 
-```
-### `RQ3/`
-This folder contains all the records and documentation related to our RQ3.
+### Major Changes & Fixes
 
-### `source_code/`
+- **[Documentation]** Added a comprehensive, step-by-step `README.md` covering system requirements, installation, and end-to-end execution.
+- **[Testing]** Introduced a **Minimal Functional Test** workflow intended to complete within **≤10 minutes** *after the Docker image is built*.
+- **[Environment]** Documented dependency configuration (Docker-first), Python base image version, and SMT solver usage.
+- **[Transparency]** Documented expected outputs and added a troubleshooting section for common LLM API and runtime issues.
+- **[Legal]** Included clear license information (MIT) in the root directory and Zenodo metadata.
 
-This directory contains the implementation of the agentic tax optimization service and all runtime configuration:
-
-- `agents/`  
-  - Multi-agent orchestration and tool registry (Caller / Constraint / Execute / Reasoning).  
-  - Frontends such as:
-    - `app_gradio.py` — Gradio UI (interactive demo).
-  - Integrations in `agents/integrations/` (e.g., FIN backend webhook).
-  - For the convenience of non-Chinese speakers, we have provided English versions of our documentation. - - Please refer to: 
-    - multi_agent_tax_system_en.py and app_gradio_en.py to understand the implementation of the agentic service. 
-    - Note that the original Chinese version remains the recommended standard for actual testing and operation.
-
-- `tax_calculators/`  
-  - Per-tax-type calculators, each with its own generated Z3 SMT constraint modules, e.g.:
-    - `income_tax.py`
-    - `business_income_tax.py`
-    - `gift_tax.py`
-    - `tobacco_alcohol_tax.py`
-    - …and others.  
-  - Shared helpers such as `tax_calculator.py`, `constraint_utils.py`, `util.py`.
-
-- `parsers/`  
-  - RAG utilities and the report renderer used by the Reasoning agent.
-
-- `reports/`  
-  - Report rendering templates and, at runtime, the directory where the latest reports are written under `reports/last_run/` (see below).
-
-- `logs/`  
-  - Runtime log directory. The main rotating log file is `logs/tax_app.log` inside the container (or local directory when running locally).
-
-- `Dockerfile`, `docker-compose.yml`  
-  - Container and compose files **live inside `source_code/`**.  
-  - Used to build and run the system as a self-contained service for this artifact.
-
-- `requirements.txt`  
-  - Python dependencies for running the backend without Docker.
-
-- `Readme.md` (inside `source_code/`)  
-  - Original system-level notes from the development repository (left largely unchanged).
-
-> If you are only interested in using the system as a service, `source_code/` together with the Docker configuration is all you need.
-
-# `source_code/code_synthesis`
-
-Artifacts related to **methodology: code synthesis layer** and **RQ1**:
-
-- **Legal Clause Retrieval & Tax Code Generation**:  
-  This directory contains the core functionality for retrieving tax law clauses from a Chroma vector store and synthesizing tax code based on the retrieved clauses using advanced LLMs.
-
-- **PDF Ingestion Scripts**:  
-  Scripts for ingesting legal documents (such as tax law PDFs) and converting them into a format suitable for indexing and retrieval in the Chroma vector store.
-
-- **Chroma Integration**:  
-  Files responsible for building the Chroma store with legal documents, as well as querying the stored clauses during the code generation process.
-
-- **Code Synthesis Pipeline**:  
-  A pipeline that generates and repairs tax computation code, using reasoning techniques to ensure accuracy and compliance with legal frameworks.
-
-- **`README.md`**:  
-  A comprehensive guide describing the steps and required dependencies to execute the pipeline, including how to ingest documents, build the Chroma store, and run the code generation pipeline..
-
-This directory is crucial for understanding the **code synthesis methodology** and reproducing the experiments.
-
-
-### `source_code/selenium_test_records`
-
-Artifacts related to **RQ2: Generalization to Unseen Inputs / Constraint Code Accuracy**:
-
-- Random test-case generators that sample inputs within each portal field’s domain while respecting UI guards (e.g., spouse fields only when `married=true`, valid ranges/enums, precision constraints).
-- Scripts to run Monte-Carlo validation by comparing our synthesized SMT solvers against the official MoF eTax calculators on large batches of unseen cases per regime.
-- Collected mismatch logs (if any), per-regime accuracy summaries, and scripts to regenerate the accuracy numbers reported in the paper (solver = 100% vs GPT-5-level prompt-only baseline).
-- A dedicated `source_code/selenium_test_records/Readme.md` describing the exact commands to reproduce the RQ2 experiments.
----
-
-## Requirements
-
-### Hardware
-
-- CPU: any modern x86-64 CPU; 4+ cores recommended.
-- RAM: **8 GB** minimum; **16 GB** recommended for larger batches.
-- Disk: at least **5 GB** free (Docker image + logs + reports).
-- GPU: **not required** for the SMT/agentic backend.  
-  LLM calls are made via external APIs; no local GPU inference is performed.
-
-### Software
-
-You can run the artifact in two ways:
-
-1. **Docker (recommended)**
-   - Docker Engine ≥ 24.x
-   - Docker Compose plugin
-
-2. **Local Python environment**
-   - Python ≥ 3.10
-   - `pip` and ability to install standard scientific / web packages.
-
-### External Services / Secrets
-
-The system uses remote LLM and (optionally) integration endpoints:
-
-- An LLM API key (e.g., `OPENAI_API_KEY`).  
-- Optional: internal URLs for the tax portal and FIN backend (`FIN_BACKEND_BASEURL`, etc.).
-
-For artifact evaluation, we provide configuration presets that:
-
-- Either use the LLM API directly or rely on cached responses / stubs when no key is available.
-
-The exact environment variables are documented in:
-
-- `source_code/Readme.md`, and  
-- `.env.example` next to `source_code/docker-compose.yml`.
+**How to verify:** Follow the **Linear walkthrough** section below to run the end-to-end workflow and confirm outputs.
 
 ---
 
-## Setup
+## What this artifact contains
 
-### Option A: Docker (recommended path)
+This artifact contains a complete implementation of an **agentic taxation optimization** system that combines:
 
-1. **Clone the repository**
+- **LLM orchestration** (for parsing, reasoning, and report drafting), and  
+- **SMT constraint reasoning (Z3)** (for numeric constraint satisfaction / optimization)
+
+to generate optimization results and reproduce the workflows described in the paper.
+
+**Primary entry point:** a **Gradio UI** served by `agents/app_gradio.py` (inside the Docker image).  
+**Included data:** the archive includes **author-generated logs** and **author-generated Selenium validation records** (RQ2). These are not third‑party datasets.
+
+**Language note (Chinese-first):** the UI and prompts are Traditional Chinese-first. Evaluators can translate if needed.
+
+---
+
+## Quick Start (Minimal Functional Test)
+
+This is the minimal end-to-end functional test intended for ICSE AE.  
+It is UI-driven and should complete within **≤10 minutes** once the service is running.
+
+### 0) Download & unzip (Zenodo)
+
+1. Go to the Zenodo record (DOI above) and download the archive.
+2. Unzip it and enter the extracted folder.
 
 ```bash
-git clone https://github.com/qain1104/Agentic-Taxation-Optimization-via-LLM-SMT-Constraint-Reasoning.git
-cd Agentic-Taxation-Optimization-via-LLM-SMT-Constraint-Reasoning
+unzip *.zip
+ls -1d */ | head -n 1
+cd <EXTRACTED_ARTIFACT_DIR>
 ```
 
-2. **Enter `source_code/`**
+### 1) Configure environment variables
 
 ```bash
 cd source_code
-```
-
-3. **Create a `.env` file**
-
-If a `.env.example` is provided:
-
-```bash
 cp .env.example .env
 ```
 
 Edit `.env` and set at least:
 
 ```text
-OPENAI_API_KEY=your-api-key-here (MOST IMPORTANT THING TO DO TO RUN THE SYSTEM)
-# FIN_BACKEND_BASEURL=http://example-fin-backend:6677
-# TAX_LOG_DIR=/app/logs
-# (Add other variables as needed; see source_code/Readme.md)
+OPENAI_API_KEY=your-api-key-here
 ```
 
-4. **Build and start the backend**
+**Internet access is required** (remote LLM API). Offline / no-API-key mode is not supported in this release.
+
+### 2) Build and run
 
 ```bash
+# First build may take ~10 minutes (downloads + dependency install)
 docker compose build
+
+# Run the service (foreground; recommended for first run)
 docker compose up
 ```
 
-This will:
+The UI is exposed on:
 
-- Build a container image for the agentic backend from `source_code/`.  
-- Start the service exposing its UI / API on port **32770** (as configured in `docker-compose.yml`).
+- http://localhost:32770
 
-5. **Basic smoke test**
+### 3) Verify the service is alive (liveness check)
 
-- If the Gradio UI is enabled as the container entrypoint, open a browser:  
+In a new terminal:
 
-  http://localhost:32770
+```bash
+curl -sSf http://localhost:32770/openapi.json >/dev/null && echo "OK"
+```
 
-  You should see the UI.
+**Success criteria:** prints `OK`.  
+*(Note: `/docs` may be disabled; `/openapi.json` is the canonical liveness check.)*
 
-- If the FastAPI HTTP API is enabled, you can also issue a health check:
+### 4) Run the UI “Income tax” test case (「下一步」流程)
 
-  ```bash
-  curl http://localhost:32770/health
-  ```
+Open the UI:
 
-  Expected output:
+- http://localhost:32770
 
-  ```json
-  { "status": "ok", "time": "..." }
-  ```
+#### Step 0 — Select which tax to compute (required)
 
-This confirms that the containerized artifact is installed and running.
+Before entering the 3-phase workflow, **tell the system which tax you want to compute** (e.g., income tax),
+**or click the corresponding button on the right panel**.
+
+Type and send:
+
+> 我要算所得稅
+
+#### Phase 1 — Tax scenario input (copy/paste)
+
+Paste and send:
+
+> 我是一名公司高管，年收400萬、太太在家當貴婦，我們有兩個小孩。
+
+Then type and send:
+
+> 下一步
+
+#### Phase 2 — Customized condition input (copy/paste)
+
+Paste and send:
+
+> 我想嘗試調整一些配置，所得總和400萬。
+
+Then type and send:
+
+> 下一步
+
+#### Phase 3 — Calculation & report generation
+
+Wait for the system to generate an optimization result and a report.
+
+**UI success criteria:**  
+- a generated result/report is displayed in the UI (Markdown-like text is acceptable), and  
+- logs and/or report artifacts are written under `source_code/logs/` and/or `source_code/reports/` (see below).
 
 ---
 
-### Option B: Local Python install (alternative)
+## Expected outputs (what to look for)
 
-> This path is provided for users who prefer not to use Docker.  
-> Docker remains the recommended option for artifact evaluation.
+Because this artifact is UI-driven, filenames may vary by configuration.
+We define an **authoritative verification procedure**:
 
-1. **Create and activate a virtual environment**
-
-```bash
-cd source_code
-python3 -m venv .venv
-source .venv/bin/activate      # On Windows: .venv\Scripts\activate
-```
-
-2. **Install dependencies**
+After completing the UI test case once, run:
 
 ```bash
-pip install -r requirements.txt
+# show recent files (modified within the last ~10 minutes)
+find source_code -maxdepth 5 -type f -mmin -10 | sort
+
+# common output folders
+find source_code -maxdepth 5 -type f | grep -E "reports|output|outputs|logs|artifacts" | sort | head -n 200
 ```
 
-3. **Set environment variables**
+### Typical output locations
 
-```bash
-export OPENAI_API_KEY=your-api-key-here
-# export TAX_LOG_DIR=./logs
-# export FIN_BACKEND_BASEURL=http://example-fin-backend:6677
-# (Others as required)
-```
+- **Logs:** `source_code/logs/` (e.g., `tax_app.log`)
+- **Reports / artifacts:** `source_code/reports/` (report files and/or JSON records depending on configuration)
 
-4. **Run the backend**
-
-Choose one of the entrypoints:
-
-- **Gradio UI**
-
-  ```bash
-  python agents/app_gradio.py
-  ```
-
-- **HTTP API (FastAPI)**
-
-  ```bash
-  python agents/app_fastapi.py
-  ```
-
-The service will listen on the port configured in the corresponding app (by default 32770).
+**Functional success criteria (files):**
+- at least one file under `source_code/logs/` is updated during the run, and  
+- at least one new/updated artifact appears under `source_code/reports/` (if report export is enabled in your configuration).
 
 ---
 
-## Basic API Usage Example
+## System requirements
 
-Once the HTTP API is running (via Docker or `app_fastapi.py`), you can interact with the REST endpoints.
+### Supported OS
 
-### 1. Health check
+- **Linux / macOS / Windows** (via Docker)
+
+### Hardware (minimum)
+
+- CPU: x86-64, 4+ cores recommended  
+- RAM: 8 GB minimum (16 GB recommended for larger batches)  
+- Disk: ≥ 5 GB free  
+- GPU: not required
+
+### Software
+
+- **Docker (recommended for ICSE AE):** Docker Engine + Docker Compose plugin
+- The Docker image is based on **`python:3.11-slim`** and includes Python dependencies.
+
+### External tools / solvers
+
+- **Z3:** the Docker image includes the Python package **`z3-solver`**. No separate system-wide Z3 install is required for the Docker path.
+
+### External services / secrets
+
+- A valid LLM API key (e.g., `OPENAI_API_KEY`) is required.
+- Internet access is required to call the remote LLM API.
+
+---
+
+## Linear walkthrough (clean machine)
+
+1. Install Docker + Docker Compose  
+2. Download the Zenodo archive and unzip  
+3. `cd <EXTRACTED_ARTIFACT_DIR>/source_code`  
+4. `cp .env.example .env` and set `OPENAI_API_KEY`  
+5. `docker compose build`  
+6. `docker compose up`  
+7. `curl -sSf http://localhost:32770/openapi.json >/dev/null && echo "OK"`  
+8. Open `http://localhost:32770`  
+9. Run the “Income tax” UI test case (Step 0 → Phase 1 → 下一步 → Phase 2 → 下一步 → Phase 3)  
+10. Inspect outputs under `source_code/logs/` and `source_code/reports/` using the commands in **Expected outputs**
+
+---
+
+## Minimal Functional Test suite (scripted helper)
+
+A small helper script is provided to:
+- wait for the service to become ready, and
+- guide the evaluator through the UI test, then
+- print recently modified files under `logs/` and `reports/`.
+
+Run (in `source_code/`):
 
 ```bash
-curl http://localhost:32770/health
-```
-
-### 2. Single optimization run (`/run`)
-
-```bash
-curl -X POST http://localhost:32770/run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tool_name": "income_tax",
-    "user_params": {
-      "is_married": false,
-      "salary_income": 1200000,
-      "other_income": 0,
-      "standard_deduction": true
-    },
-    "constraints": {},
-    "free_vars": [],
-    "op": "minimize",
-    "budget_tax": null
-  }'
-```
-
-Example response (simplified):
-
-```json
-{
-  "status": "ok",
-  "kpi": {
-    "tax_before": 123456,
-    "tax_after": 98765
-  },
-  "final_params": { "...": "..." },
-  "diff": { "...": "..." },
-  "report_md": "## Tax optimization report\n..."
-}
-```
-
-### 3. Export latest report (`/export`)
-
-```bash
-curl -X POST http://localhost:32770/export \
-  -H "Content-Type: application/json" \
-  -d '{
-    "format": "both",
-    "push_to_fin": false
-  }'
-```
-
-The response includes:
-
-- `title` — report title  
-- `md` — Markdown report content  
-- `json` — JSON-structured report  
-- `delivery` — delivery status if `push_to_fin=true`
-
-At the file-system level, the latest report and delivery logs are also stored under:
-
-```text
-source_code/reports/last_run/
-    ├── last.md
-    ├── last.json
-    ├── last.sent.log
-    └── last.sent.response.json
+bash ../scripts/minimal_functional_test.sh
 ```
 
 ---
+
+## Troubleshooting / known issues
+
+1) **`OPENAI_API_KEY` missing**
+- Symptom: authentication / missing key errors
+- Cause: `.env` not created or key not set
+- Fix: ensure `source_code/.env` contains `OPENAI_API_KEY=...`, then restart `docker compose up`
+
+2) **Connection reset by peer / service restarts**
+- Symptom: `curl: (56) Recv failure: Connection reset by peer` or the UI disconnects
+- Likely cause: backend crashed and is restarting (missing env vars, dependency error, runtime exception)
+- Fix:
+  ```bash
+  docker compose logs --tail=200
+  docker compose down
+  docker compose up --build
+  ```
+
+3) **Port `32770` already in use**
+- Symptom: Docker cannot bind to `0.0.0.0:32770`
+- Cause: another process is using the port
+- Fix: stop the conflicting process, or change the host port mapping in `docker-compose.yml`
+
+4) **LLM request failures (rate limit / model not found / network)**
+- Symptom: UI shows API errors or timeouts
+- Cause: API rate limit, invalid model configuration, or network instability
+- Fix: retry, verify `.env` model settings (if present), and confirm internet access
+
+5) **SMT / Z3 errors (local mode)**
+- Symptom: import errors if running outside Docker
+- Cause: missing `z3-solver` dependency
+- Fix: `pip install z3-solver` (Docker path already includes it)
+
+---
+
+## Artifact–paper alignment
+
+This artifact demonstrates the paper’s end-to-end workflow and experiment pipelines.
+
+- **Running example (Minimal Functional Test):**
+  - Paper: Section “Agentic Orchestration” → “A Running Example on Income Tax Optimization” (`\label{sec:running-example}`)
+  - Figure: “End-to-end income tax optimization” (`\label{fig:income-demo}`)
+  - Artifact: Gradio UI workflow with “所得稅” + “下一步” phases
+
+- **RQ1: Constraint Code Synthesis** (`\label{sec:rqs}`): code synthesis / repair pipeline
+- **RQ2: Portal-aligned verification** (`\label{sec:rqs}`): author-generated Selenium validation records
+- **RQ3: Optimizing Real-World Tax Decisions** (`\label{sec:rq3}`): records and documentation in the archive
+
+### Limitations
+
+For AE Functional, this release prioritizes a minimal end-to-end UI demonstration of the workflow.
+Full-scale reproduction of all experimental tables may require longer runtimes and additional compute/API budget.
+
+---
+
+## License
+
+This artifact is released under the **MIT License**. See `LICENSE`.
