@@ -48,6 +48,7 @@ import z3  # noqa: F401
 
 # NOTE: sync OpenAI client; we wrap streaming calls using asyncio.to_thread.
 from openai import OpenAI
+from portal_harvesting.orchestrator import harvest_and_render_portal, write_harvest_artifacts
 
 
 # ---------- Defaults (can be overridden by CLI) ----------
@@ -1680,7 +1681,7 @@ async def synthesize_with_auto_repair(
 # ============== CLI ==============
 async def _amain() -> None:
     parser = argparse.ArgumentParser(description="Tax SMT agent (RAG + OpenAI + local exec + auto repair + traces).")
-    parser.add_argument("--input", required=True, help="Path to the natural-language task text.")
+    parser.add_argument("--input", required=False, help="Path to the natural-language task text.")
     parser.add_argument("--rag-query", default=None, help="Optional explicit RAG query; defaults to input text.")
     parser.add_argument("--chroma-dir", default="chroma_db", help="Chroma persistence directory for RAG (persist_dir).")
     parser.add_argument("--collection", default="tax_laws", help="Chroma collection name.")
@@ -1714,6 +1715,11 @@ async def _amain() -> None:
     parser.add_argument("--extra-ref", action="append", default=[], help="Path to a local .txt reference file. Can be repeated.")
     parser.add_argument("--schema", default="income_tax", help=f"Schema name (for probes & key hints). Available: {sorted(SCHEMA_REQUIRED_KEYS)}")
     parser.add_argument("--contract-file", default=None, help="Optional path to a full Code Contract text (overrides default).")
+    parser.add_argument("--harvest-portal", action="store_true", help="Harvest portal variables/formulas before synthesis.")
+    parser.add_argument("--portal-schema", default=None, help="Portal schema name; defaults to --schema.")
+    parser.add_argument("--portal-url", default=None, help="Explicit portal URL override.")
+    parser.add_argument("--portal-html", default=None, help="Local HTML snapshot for portal harvesting.")
+    parser.add_argument("--portal-timeout-ms", type=int, default=30000, help="Browser timeout for portal harvesting.")
 
     parser.add_argument("--embed-model", default=DEFAULT_EMBED_MODEL, help="Embedding model used by Chroma query embedding.")
     parser.add_argument("--codegen-model", default=DEFAULT_CODEGEN_MODEL, help="LLM model for initial code generation.")
@@ -1731,8 +1737,8 @@ async def _amain() -> None:
 
     # --- run_dir naming: <schema>_<timestamp> ---
     ts = _now_tag()
-    tax_name = Path(args.input).stem  # income_tax (from income_tax.txt)
-    run_dir = Path(args.run_dir) if args.run_dir else Path("source_code/code_synthesis/runs") / f"{tax_name}_{ts}"
+    task_stem = Path(args.input).stem if args.input else (args.portal_schema or args.schema)
+    run_dir = Path(args.run_dir) if args.run_dir else Path("source_code/code_synthesis/runs") / f"{task_stem}_{ts}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] run_dir: {run_dir}", flush=True)
 
@@ -1743,7 +1749,28 @@ async def _amain() -> None:
     if samples is None:
         raise RuntimeError("You must provide --samples.")
 
-    user_problem = Path(args.input).read_text(encoding="utf-8")
+    portal_schema = args.portal_schema or args.schema
+    portal_problem = None
+    portal_refs = None
+    if args.harvest_portal:
+        artifacts = harvest_and_render_portal(
+            schema=portal_schema,
+            url=args.portal_url,
+            html_path=args.portal_html,
+            timeout_ms=args.portal_timeout_ms,
+        )
+        write_harvest_artifacts(artifacts, str(run_dir), portal_schema)
+        portal_problem = artifacts.problem_text
+        portal_refs = artifacts.refs_text
+
+    if args.input:
+        user_problem = Path(args.input).read_text(encoding="utf-8")
+        if portal_problem:
+            user_problem = user_problem.strip() + "\n\n【Portal Harvested Input】\n" + portal_problem.strip()
+    elif portal_problem:
+        user_problem = portal_problem
+    else:
+        raise RuntimeError("You must provide --input or enable --harvest-portal.")
 
     # web search settings
     web_allowed_domains: Optional[List[str]] = None
@@ -1754,10 +1781,16 @@ async def _amain() -> None:
 
     # extra refs + contract (line-numbered refs)
     aux_refs = read_text_files_line_numbered(list(args.extra_ref or []))
+    if portal_refs:
+        aux_refs = portal_refs + "\n\n" + aux_refs
     code_contract = build_code_contract([args.schema], args.contract_file)
 
     # Save run inputs for reproducibility
     (run_dir / "task_input.txt").write_text(user_problem, encoding="utf-8")
+    if portal_problem:
+        (run_dir / "portal_problem.txt").write_text(portal_problem, encoding="utf-8")
+    if portal_refs:
+        (run_dir / "portal_refs.txt").write_text(portal_refs, encoding="utf-8")
     (run_dir / "samples.json").write_text(json.dumps(samples, ensure_ascii=False, indent=2), encoding="utf-8")
     (run_dir / "extra_ref_paths.json").write_text(json.dumps(list(args.extra_ref or []), ensure_ascii=False, indent=2), encoding="utf-8")
 

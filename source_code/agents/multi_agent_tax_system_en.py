@@ -3131,7 +3131,7 @@ class ConstraintAgent(BaseAgent):
                 self.memory.set("await_execute_confirm", True)
 
                 # 重新渲染最終確認頁（與第一次進入確認時一致）
-                params_md = self._fmt_params_preview(tool, payload, mask_free_and_constrained=True)
+                params_md = self._fmt_params_preview(tool, payload)
                 preview_md = self._fmt_constraints_preview_zh(tool, payload)
                 tips_md = await self._condition_refiner_tips(tool, payload)
 
@@ -3154,7 +3154,7 @@ class ConstraintAgent(BaseAgent):
             if is_next or is_done:
                 self.memory.set("await_execute_confirm", True)
                 # 第三階段顯示：若變數在 free_vars 或受約束，覆蓋輸入值為「由求解器決定」
-                params_md = self._fmt_params_preview(tool, payload, mask_free_and_constrained=True)
+                params_md = self._fmt_params_preview(tool, payload)
                 preview_md = self._fmt_constraints_preview_zh(tool, payload)
                 tips_md = await self._condition_refiner_tips(tool, payload)
                 confirm_text = (
