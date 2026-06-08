@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from z3 import Optimize, Real, Int, RealVal, ToInt, Sum
+
+from z3 import Optimize, Real, Int, RealVal, IntVal, ToReal, Sum
+
 from tracked_tax_core import BaseTrackedTaxCase, cli_main, run_tracked_analysis
+
 
 ITEMS = {
     "cement_white": {"mode": "fixed", "unit_tax": 600},
@@ -38,6 +41,7 @@ ITEMS = {
     "motorcycle": {"mode": "adval", "rate": 0.17},
 }
 
+
 BUILTIN_PAYLOADS = [
     {
         "case_id": "cargo_minimize_cement_drink_car",
@@ -48,7 +52,11 @@ BUILTIN_PAYLOADS = [
             "drink_other.assessed_price": 200,
             "car_le_2000cc.quantity": 0,
             "car_le_2000cc.assessed_price": 600_000,
-            "free_vars": ["drink_other.quantity", "car_le_2000cc.quantity", "car_le_2000cc.assessed_price"],
+            "free_vars": [
+                "drink_other.quantity",
+                "car_le_2000cc.quantity",
+                "car_le_2000cc.assessed_price",
+            ],
             "constraints": {
                 "drink_other.quantity + car_le_2000cc.quantity": {"=": 50},
                 "car_le_2000cc.quantity": {"<=": 10},
@@ -88,60 +96,140 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
             return self
         self._built = True
         self.opt = Optimize()
+
+        # Important fix:
+        # Quantities must be integer-valued like the original cargo_tax.py.
+        # We still expose them as Real expressions via ToReal(q_int), because
+        # the shared linear-constraint parser handles Real arithmetic well.
+        #
+        # The old traced version used Real quantities and one global
+        # final_tax = ToInt(total_tax). That allowed fractional quantities and
+        # made the minimization/probe disagree for case 0.
+        #
+        # This version mirrors the original expanded model:
+        #   q_int: Int
+        #   q = ToReal(q_int)
+        #   row_tax_int = floor(row_tax_real)
+        #   total_tax_int = Sum(row_tax_ints)
+        quantity_int_vars = {}
+
         for slug, spec in ITEMS.items():
-            q = Real(f"{slug}_quantity")
-            self._add_param(f"{slug}.quantity", q, self._num(f"{slug}.quantity"), [("nonnegative", lambda v: v >= 0)])
+            q_int = Int(f"{slug}_quantity_int")
+            q = ToReal(q_int)
+            quantity_int_vars[slug] = q_int
+
+            self._add_param(
+                f"{slug}.quantity",
+                q,
+                self._num(f"{slug}.quantity"),
+                [("nonnegative", lambda v: v >= 0)],
+                releasable=(f"{slug}.quantity" in self.explicit_keys),
+            )
+
             if spec["mode"] == "adval":
                 p = Real(f"{slug}_assessed_price")
-                self._add_param(f"{slug}.assessed_price", p, self._num(f"{slug}.assessed_price"), [("nonnegative", lambda v: v >= 0)])
+                self._add_param(
+                    f"{slug}.assessed_price",
+                    p,
+                    self._num(f"{slug}.assessed_price"),
+                    [("nonnegative", lambda v: v >= 0)],
+                    releasable=(f"{slug}.assessed_price" in self.explicit_keys),
+                )
+
         self._bind_params()
-        tax_terms = []
+
+        # Add explicit integer-domain constraints for the underlying quantity
+        # variables. These are not releasable; they are part of the tax model.
+        for slug, q_int in quantity_int_vars.items():
+            self.add(q_int >= 0, name=f"domain.{slug}.quantity_int_nonnegative", group="domain")
+
+        item_tax_ints = []
         qty_terms = []
+
         for slug, spec in ITEMS.items():
             q = self.params[f"{slug}.quantity"][0]
             qty_terms.append(q)
+
             if spec["mode"] == "fixed":
-                expr = RealVal(str(spec["unit_tax"])) * q
+                expr_real = RealVal(str(spec["unit_tax"])) * q
             else:
                 p = self.params[f"{slug}.assessed_price"][0]
-                expr = RealVal(str(spec["rate"])) * p * q
-            row_tax = Real(f"{slug}_tax")
+                expr_real = RealVal(str(spec["rate"])) * p * q
+
+            row_tax = Int(f"{slug}_tax")
             self.vars[f"{slug}.tax"] = row_tax
-            self.add(row_tax == expr, name=f"law.{slug}.tax")
-            tax_terms.append(row_tax)
-        total_tax = Real("total_tax")
+
+            # row_tax = floor(expr_real), encoded without using ToInt.
+            # This follows the original expanded cargo_tax.py implementation,
+            # which creates per-item integer taxes and then sums them.
+            self.add(ToReal(row_tax) <= expr_real, name=f"law.{slug}.tax_floor_lower")
+            self.add(expr_real < ToReal(row_tax) + RealVal("1"), name=f"law.{slug}.tax_floor_upper")
+
+            item_tax_ints.append(row_tax)
+
+        total_tax = Int("total_tax")
         final_tax = Int("final_tax_z")
         total_qty = Real("total_qty")
         objective_qty = Int("objective_qty")
-        self.vars.update({"total_tax": total_tax, "total_qty": total_qty, "objective_qty": objective_qty, "final_tax_z": final_tax})
-        self.add(total_tax == Sum(tax_terms), name="law.total_tax")
-        self.add(final_tax == ToInt(total_tax), name="law.final_tax_floor")
+
+        self.vars.update(
+            {
+                "total_tax": total_tax,
+                "total_qty": total_qty,
+                "objective_qty": objective_qty,
+                "final_tax_z": final_tax,
+            }
+        )
+
+        self.add(total_tax == Sum(item_tax_ints), name="law.total_tax_int_sum")
+        self.add(final_tax == total_tax, name="law.final_tax_equals_total_tax")
         self.add(total_qty == Sum(qty_terms), name="law.total_qty")
-        self.add(objective_qty == ToInt(total_qty), name="objective_link.total_qty_int", group="objective_link")
+        self.add(objective_qty == total_qty, name="objective_link.total_qty_int", group="objective_link")
+
         if self.payload.get("budget_tax") is not None:
-            self.add(total_tax <= RealVal(str(float(self.payload.get("budget_tax")))), name="user_constraint.budget_tax", group="user_constraint", releasable=True)
+            self.add(
+                total_tax <= IntVal(int(float(self.payload.get("budget_tax")))),
+                name="user_constraint.budget_tax",
+                group="user_constraint",
+                releasable=True,
+            )
+
         self.final_tax_z = final_tax
         self.net_taxable_z = total_tax
+
         if self.payload.get("objective") == "max_qty":
             self.objective_z = objective_qty
             self.objective_sense = "max"
+            self.objective_label = "total_qty"
         else:
             self.objective_z = final_tax
             self.objective_sense = "min"
+            self.objective_label = "total_tax"
+
         self._add_user_constraints()
         self._optimize()
         return self
 
 
 def minimize_cargo_tax(**payload):
-    payload = dict(payload); payload["objective"] = "min_tax"
+    payload = dict(payload)
+    payload["objective"] = "min_tax"
     return run_tracked_analysis(CargoTaxTrackedCase, payload)
 
 
 def maximize_cargo_qty(**payload):
-    payload = dict(payload); payload["objective"] = "max_qty"
+    payload = dict(payload)
+    payload["objective"] = "max_qty"
     return run_tracked_analysis(CargoTaxTrackedCase, payload)
 
 
 if __name__ == "__main__":
-    raise SystemExit(cli_main(CargoTaxTrackedCase, BUILTIN_PAYLOADS, title=CargoTaxTrackedCase.title, default_json="cargo_tax_unsat_report.json", default_md="cargo_tax_unsat_report.md"))
+    raise SystemExit(
+        cli_main(
+            CargoTaxTrackedCase,
+            BUILTIN_PAYLOADS,
+            title=CargoTaxTrackedCase.title,
+            default_json="cargo_tax_unsat_report.json",
+            default_md="cargo_tax_unsat_report.md",
+        )
+    )
