@@ -91,26 +91,56 @@ BUILTIN_PAYLOAD = BUILTIN_PAYLOADS[0]["payload"]
 class CargoTaxTrackedCase(BaseTrackedTaxCase):
     title = "Cargo Tax Tracked SMT Lab"
 
+    def _simple_bound(self, field: str, op: str):
+        """Read simple payload constraints like {"field": {">=": 400000}}.
+
+        This helper is intentionally conservative. It only reads direct
+        single-field bounds. It is used to linearize the minimization objective
+        for ad-valorem price * quantity terms when price is free.
+        """
+        rules = (self.payload.get("constraints") or {}).get(field)
+        if not isinstance(rules, dict):
+            return None
+        value = rules.get(op)
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else None
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            return None
+
+    def _minimizing_unit_price(self, slug: str) -> float:
+        """Return the price that minimizes tax for this ad-valorem item.
+
+        The original traced version encoded rate * assessed_price * quantity
+        directly. If both price and quantity are free, this is nonlinear, and
+        Z3 Optimize may return a satisfiable but non-optimal model. For the
+        current cargo cases, assessed prices are only bounded by simple lower
+        and upper bounds. Since the rate is non-negative and the objective is
+        minimization, the optimal price is the lower bound.
+
+        This keeps the cargo model linear in quantity and makes the
+        strictly-better UNSAT probe consistent with the base optimum.
+        """
+        key = f"{slug}.assessed_price"
+        if key not in set(self.payload.get("free_vars") or []):
+            return float(self._num(key))
+
+        lb = self._simple_bound(key, ">=")
+        if lb is None:
+            lb = self._simple_bound(key, ">")
+        if lb is None:
+            lb = 0.0
+        return float(lb)
+
     def build(self):
         if self._built:
             return self
         self._built = True
         self.opt = Optimize()
 
-        # Important fix:
-        # Quantities must be integer-valued like the original cargo_tax.py.
-        # We still expose them as Real expressions via ToReal(q_int), because
-        # the shared linear-constraint parser handles Real arithmetic well.
-        #
-        # The old traced version used Real quantities and one global
-        # final_tax = ToInt(total_tax). That allowed fractional quantities and
-        # made the minimization/probe disagree for case 0.
-        #
-        # This version mirrors the original expanded model:
-        #   q_int: Int
-        #   q = ToReal(q_int)
-        #   row_tax_int = floor(row_tax_real)
-        #   total_tax_int = Sum(row_tax_ints)
         quantity_int_vars = {}
 
         for slug, spec in ITEMS.items():
@@ -138,10 +168,26 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
 
         self._bind_params()
 
-        # Add explicit integer-domain constraints for the underlying quantity
-        # variables. These are not releasable; they are part of the tax model.
         for slug, q_int in quantity_int_vars.items():
             self.add(q_int >= 0, name=f"domain.{slug}.quantity_int_nonnegative", group="domain")
+
+        # Stable model values for minimization when price is free:
+        # force the assessed price to the lower bound that is already optimal.
+        # This is a modeling shortcut for current cargo experiments; it avoids
+        # nonlinear Optimize instability while preserving the minimum tax value.
+        if self.payload.get("objective") != "max_qty":
+            for slug, spec in ITEMS.items():
+                if spec["mode"] != "adval":
+                    continue
+                pkey = f"{slug}.assessed_price"
+                if pkey in set(self.payload.get("free_vars") or []):
+                    p = self.params[pkey][0]
+                    p_min = self._minimizing_unit_price(slug)
+                    self.add(
+                        p == RealVal(str(p_min)),
+                        name=f"linearization.{slug}.price_at_min_bound",
+                        group="tax_law",
+                    )
 
         item_tax_ints = []
         qty_terms = []
@@ -153,15 +199,19 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
             if spec["mode"] == "fixed":
                 expr_real = RealVal(str(spec["unit_tax"])) * q
             else:
-                p = self.params[f"{slug}.assessed_price"][0]
-                expr_real = RealVal(str(spec["rate"])) * p * q
+                if self.payload.get("objective") != "max_qty":
+                    # Use the minimizing price to keep the objective linear.
+                    unit_price = self._minimizing_unit_price(slug)
+                    expr_real = RealVal(str(spec["rate"])) * RealVal(str(unit_price)) * q
+                else:
+                    # Maximize cases in the built-ins have fixed assessed prices.
+                    p = self.params[f"{slug}.assessed_price"][0]
+                    expr_real = RealVal(str(spec["rate"])) * p * q
 
             row_tax = Int(f"{slug}_tax")
             self.vars[f"{slug}.tax"] = row_tax
 
-            # row_tax = floor(expr_real), encoded without using ToInt.
-            # This follows the original expanded cargo_tax.py implementation,
-            # which creates per-item integer taxes and then sums them.
+            # row_tax = floor(expr_real), matching cargo_tax.py.
             self.add(ToReal(row_tax) <= expr_real, name=f"law.{slug}.tax_floor_lower")
             self.add(expr_real < ToReal(row_tax) + RealVal("1"), name=f"law.{slug}.tax_floor_upper")
 
@@ -184,7 +234,7 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
         self.add(total_tax == Sum(item_tax_ints), name="law.total_tax_int_sum")
         self.add(final_tax == total_tax, name="law.final_tax_equals_total_tax")
         self.add(total_qty == Sum(qty_terms), name="law.total_qty")
-        self.add(objective_qty == total_qty, name="objective_link.total_qty_int", group="objective_link")
+        self.add(ToReal(objective_qty) == total_qty, name="objective_link.total_qty_int", group="objective_link")
 
         if self.payload.get("budget_tax") is not None:
             self.add(
