@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from typing import Any, Dict, Optional, Sequence
 
 from z3 import Int, Optimize, Real, RealVal, Sum, ToInt
@@ -111,7 +112,15 @@ class NVATTaxSMTCase(BaseTrackedTaxCase):
             self.vars[f"{cat}.tax_real"] = row_tax
             self.add(row_tax == z * RealVal(str(rate)), name=f"law.{cat}.tax")
             tax_terms.append(row_tax)
-            sales_terms.append(z)
+            if mode == "maximize_sales":
+                # Maximize sales only over fields that define the user scenario.
+                # Default zero categories not mentioned by the payload remain
+                # absent form defaults, even if their fixed-zero assumption is
+                # experimentally released.
+                if _payload_mentions_field(p, cat):
+                    sales_terms.append(z)
+            else:
+                sales_terms.append(z)
         self._bind_params()
         total_tax_real = Real("total_tax_real")
         total_tax = Int("total_tax")
@@ -121,7 +130,7 @@ class NVATTaxSMTCase(BaseTrackedTaxCase):
         self.vars["total_sales"] = total_sales
         self.add(total_tax_real == Sum(tax_terms), name="law.total_tax_real")
         self.add(total_tax == ToInt(total_tax_real), name="law.total_tax_floor")
-        self.add(total_sales == Sum(sales_terms), name="law.total_sales")
+        self.add(total_sales == (Sum(sales_terms) if sales_terms else RealVal("0")), name="law.total_sales")
         self.final_tax_z = total_tax
         self.net_taxable_z = total_sales
         if mode == "maximize_sales":
@@ -133,6 +142,33 @@ class NVATTaxSMTCase(BaseTrackedTaxCase):
         self._add_user_constraints()
         self._optimize()
         return self
+
+
+
+def _payload_mentions_field(payload: Dict[str, Any], field: str) -> bool:
+    """Return True when a field belongs to the actual user scenario."""
+    if field in set(payload.get("free_vars") or []):
+        return True
+    if field in payload:
+        try:
+            return abs(float(payload.get(field) or 0)) > 1e-9
+        except Exception:
+            return True
+
+    constraints = payload.get("constraints") or {}
+    if isinstance(constraints, dict):
+        token = re.escape(field)
+        pattern = re.compile(rf"(?<![A-Za-z0-9_.]){token}(?![A-Za-z0-9_.])")
+        for lhs, rules in constraints.items():
+            if pattern.search(str(lhs)):
+                return True
+            if isinstance(rules, dict):
+                for rhs in rules.values():
+                    values = rhs if isinstance(rhs, (list, tuple)) else [rhs]
+                    for one in values:
+                        if isinstance(one, str) and pattern.search(one):
+                            return True
+    return False
 
 
 def _case_cls_for_payload(payload: Dict[str, Any]):
@@ -162,6 +198,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--print-core", action="store_true")
     ap.add_argument("--no-auto-combinations", action="store_true")
     ap.add_argument("--core-only", action="store_true")
+    ap.add_argument(
+        "--release-scope",
+        default="default_only",
+        choices=["default_only", "fixed_only", "all"],
+        help=(
+            "Which constraints may be released. default_only releases only "
+            "zero-valued fixed default assumptions; fixed_only releases all fixed.* "
+            "constraints; all preserves the previous broad behavior."
+        ),
+    )
     ap.add_argument("--no-release-tests", action="store_true")
     ap.add_argument("--probe-only", action="store_true")
     args = ap.parse_args(argv)
@@ -181,6 +227,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         auto_release=not getattr(args, "no_release_tests", False),
         auto_combinations=not getattr(args, "no_auto_combinations", False) and not getattr(args, "no_release_tests", False),
         include_non_core=not getattr(args, "core_only", False),
+        release_scope=args.release_scope,
     )
     write_report(report, json_out=args.json_out, md_out=args.md_out, title="Sale Tax Tracked SMT Lab")
     base = report.get("base", {})

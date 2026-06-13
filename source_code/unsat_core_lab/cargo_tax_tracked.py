@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import re
+
 from z3 import Optimize, Real, Int, RealVal, IntVal, ToReal, Sum
 
 from tracked_tax_core import BaseTrackedTaxCase, cli_main, run_tracked_analysis
@@ -111,6 +113,37 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
         except Exception:
             return None
 
+    def _payload_mentions_field(self, field: str) -> bool:
+        """Return True when a field belongs to the actual user scenario.
+
+        For maximize-under-budget cases, absent catalog rows with default zero
+        should remain form defaults, not decision variables in the maximized
+        quantity. This prevents releasing an unrelated default item from
+        changing the objective semantics.
+        """
+        if field in set(self.payload.get("free_vars") or []):
+            return True
+        if field in self.payload:
+            try:
+                return abs(float(self.payload.get(field) or 0)) > 1e-9
+            except Exception:
+                return True
+
+        constraints = self.payload.get("constraints") or {}
+        if isinstance(constraints, dict):
+            token = re.escape(field)
+            pattern = re.compile(rf"(?<![A-Za-z0-9_.]){token}(?![A-Za-z0-9_.])")
+            for lhs, rules in constraints.items():
+                if pattern.search(str(lhs)):
+                    return True
+                if isinstance(rules, dict):
+                    for rhs in rules.values():
+                        values = rhs if isinstance(rhs, (list, tuple)) else [rhs]
+                        for one in values:
+                            if isinstance(one, str) and pattern.search(one):
+                                return True
+        return False
+
     def _minimizing_unit_price(self, slug: str) -> float:
         """Return the price that minimizes tax for this ad-valorem item.
 
@@ -194,7 +227,14 @@ class CargoTaxTrackedCase(BaseTrackedTaxCase):
 
         for slug, spec in ITEMS.items():
             q = self.params[f"{slug}.quantity"][0]
-            qty_terms.append(q)
+            q_field = f"{slug}.quantity"
+            if self.payload.get("objective") == "max_qty":
+                # Maximize only the quantities that define the user scenario.
+                # Other catalog rows are merely absent/default form fields.
+                if self._payload_mentions_field(q_field):
+                    qty_terms.append(q)
+            else:
+                qty_terms.append(q)
 
             if spec["mode"] == "fixed":
                 expr_real = RealVal(str(spec["unit_tax"])) * q

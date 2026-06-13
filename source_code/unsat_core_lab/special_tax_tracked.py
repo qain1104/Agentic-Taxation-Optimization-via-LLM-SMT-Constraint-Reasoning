@@ -136,6 +136,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--print-core", action="store_true")
     ap.add_argument("--no-auto-combinations", action="store_true")
     ap.add_argument("--core-only", action="store_true")
+    ap.add_argument(
+        "--release-scope",
+        default="default_only",
+        choices=["default_only", "fixed_only", "all"],
+        help=(
+            "Which constraints may be released. default_only releases only "
+            "zero-valued fixed default assumptions; fixed_only releases all fixed.* "
+            "constraints; all preserves the previous broad behavior."
+        ),
+    )
     ap.add_argument("--no-release-tests", action="store_true")
     ap.add_argument("--probe-only", action="store_true")
     args = ap.parse_args(argv)
@@ -155,6 +165,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         auto_release=not getattr(args, "no_release_tests", False),
         auto_combinations=not getattr(args, "no_auto_combinations", False) and not getattr(args, "no_release_tests", False),
         include_non_core=not getattr(args, "core_only", False),
+        release_scope=args.release_scope,
     )
     write_report(report, json_out=args.json_out, md_out=args.md_out, title="Special Goods and Services Tax Tracked SMT Lab")
     base = report.get("base", {})

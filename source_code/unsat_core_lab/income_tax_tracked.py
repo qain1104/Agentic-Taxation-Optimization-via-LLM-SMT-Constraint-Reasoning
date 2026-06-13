@@ -892,7 +892,7 @@ def build_coi_index(
         for v in vars_in_expr:
             var_to_constraints.setdefault(v, set()).add(rec.name)
 
-        if rec.group == "fixed_input" and rec.releasable and len(vars_in_expr) == 1:
+        if rec.group == "fixed_input" and len(vars_in_expr) == 1:
             only_var = next(iter(vars_in_expr))
             fixed_var_to_constraint[only_var] = rec.name
 
@@ -1079,6 +1079,132 @@ def fixed_field_name(release_name: str) -> Optional[str]:
     return release_name[len("fixed."):]
 
 
+META_PAYLOAD_KEYS = {
+    "free_vars", "constraints", "mode", "target_tax", "budget_tax",
+    "case_id", "description", "which", "kind", "objective",
+}
+
+
+def field_appears_in_user_constraints(payload: Dict[str, Any], field: str) -> bool:
+    """Return True if a field appears in user-supplied constraints."""
+    constraints = payload.get("constraints") or {}
+    if not isinstance(constraints, dict):
+        return False
+    token = re.escape(field)
+    pattern = re.compile(rf"(?<![A-Za-z0-9_.]){token}(?![A-Za-z0-9_.])")
+    for lhs, rules in constraints.items():
+        if pattern.search(str(lhs)):
+            return True
+        if isinstance(rules, dict):
+            for rhs in rules.values():
+                values = rhs if isinstance(rhs, (list, tuple)) else [rhs]
+                for one in values:
+                    if isinstance(one, str) and pattern.search(one):
+                        return True
+    return False
+
+
+def is_default_value_field(payload: Dict[str, Any], field: str) -> bool:
+    """Zero-valued fixed fields are treated as portal default assumptions."""
+    if not field:
+        return False
+    if field in set(payload.get("free_vars") or []):
+        return False
+    if field_appears_in_user_constraints(payload, field):
+        return False
+    if field not in payload:
+        return True
+    if field in META_PAYLOAD_KEYS:
+        return False
+    value = payload.get(field)
+    if value is None:
+        return True
+    if isinstance(value, bool):
+        return value is False
+    try:
+        return abs(float(value)) < 1e-9
+    except Exception:
+        return False
+
+
+def is_allowed_release_name(name: str, payload: Dict[str, Any], *, release_scope: str) -> bool:
+    """Filter release candidates according to the RQ4 release scope."""
+    name = str(name)
+    if release_scope == "all":
+        return True
+    if not name.startswith("fixed."):
+        return False
+    if release_scope == "fixed_only":
+        return True
+    if release_scope == "default_only":
+        field = fixed_field_name(name)
+        return bool(field and is_default_value_field(payload, field))
+    raise ValueError(f"unknown release_scope: {release_scope}")
+
+
+def scoped_release_tests_from_probe(
+    probe: Dict[str, Any],
+    payload: Dict[str, Any],
+    *,
+    include_non_core: bool = True,
+    release_scope: str = "default_only",
+    tracked: Optional[List[TrackedConstraint]] = None,
+) -> List[Tuple[str, List[str]]]:
+    """Generate release tests after filtering out user constraints and facts."""
+    if release_scope == "all":
+        return infer_release_tests_from_probe(probe, include_non_core=include_non_core)
+
+    tests: List[Tuple[str, List[str]]] = []
+    seen: Set[str] = set()
+
+    def add_test(name: str, source: str) -> None:
+        if not name or name in seen:
+            return
+        if not is_allowed_release_name(name, payload, release_scope=release_scope):
+            return
+        seen.add(name)
+        tests.append((f"auto release {name} ({source})", [name]))
+
+    for item in probe.get("core") or []:
+        if isinstance(item, dict):
+            add_test(str(item.get("name")), "core")
+
+    if include_non_core and tracked is not None:
+        core_names = set(probe.get("core_names") or [])
+        for rec in tracked:
+            if rec.active and rec.name not in core_names:
+                add_test(rec.name, "non_core")
+
+    return tests
+
+
+def scope_combo_tests(
+    combo_tests: List[Tuple[str, List[str]]],
+    payload: Dict[str, Any],
+    *,
+    release_scope: str,
+) -> List[Tuple[str, List[str]]]:
+    """Remove disallowed names from generated combination tests."""
+    if release_scope == "all":
+        return combo_tests
+    out: List[Tuple[str, List[str]]] = []
+    seen: Set[Tuple[str, ...]] = set()
+    for label, names in combo_tests:
+        scoped = [
+            n for n in names
+            if is_allowed_release_name(n, payload, release_scope=release_scope)
+        ]
+        scoped = sorted(set(scoped))
+        if len(scoped) < 2:
+            continue
+        key = tuple(scoped)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((label, scoped))
+    return out
+
+
 def infer_field_type(field: Optional[str]) -> str:
     """Infer a coarse field type from a portal-aligned field name."""
     if not field:
@@ -1145,7 +1271,7 @@ def build_release_inference_context(tracked: List[TrackedConstraint]) -> Dict[st
     fixed_info: Dict[str, Dict[str, Any]] = {}
 
     for cname, rec in constraint_by_name.items():
-        if rec.group != "fixed_input" or not rec.releasable:
+        if rec.group != "fixed_input":
             continue
 
         vars_in_fixed = list(constraint_to_vars.get(cname, set()))
@@ -1456,6 +1582,7 @@ def run_analysis(
     auto_release: bool = True,
     auto_combinations: bool = True,
     include_non_core: bool = True,
+    release_scope: str = "default_only",
 ) -> Dict[str, Any]:
     base_case = IncomeTaxSMTCase(payload, objective=objective)
     base = base_case.solve()
@@ -1474,8 +1601,14 @@ def run_analysis(
         release_source = "manual"
     # 目前走這裡
     elif auto_release:
-        tests_to_run = infer_release_tests_from_probe(probe, include_non_core=include_non_core)
-        release_source = "auto_from_unsat_core"
+        tests_to_run = scoped_release_tests_from_probe(
+            probe,
+            payload,
+            include_non_core=include_non_core,
+            release_scope=release_scope,
+            tracked=base_case.tracked,
+        )
+        release_source = f"auto_from_unsat_core_{release_scope}"
     else:
         tests_to_run = default_release_tests()
         release_source = "default_hardcoded"
@@ -1508,6 +1641,8 @@ def run_analysis(
             max_tests=30,
         )
         heuristic_combo_tests = infer_pairwise_combo_tests(tests_out)
+        coi_combo_tests = scope_combo_tests(coi_combo_tests, payload, release_scope=release_scope)
+        heuristic_combo_tests = scope_combo_tests(heuristic_combo_tests, payload, release_scope=release_scope)
 
         seen_combo_keys: Set[Tuple[str, ...]] = set()
         for label, names in coi_combo_tests:
@@ -1571,6 +1706,7 @@ def run_analysis(
             "combo_strategy": "coi_plus_heuristic",
             "include_non_core": include_non_core,
             "release_policy": "automatic_domain_bound_and_variable_type_inference",
+            "release_scope": release_scope,
         },
         "release_tests": tests_out,
         "release_summary": {
@@ -1648,6 +1784,7 @@ def render_markdown(report: Dict[str, Any]) -> str:
     lines.append(f"- heuristic combination tests: `{release_generation.get('heuristic_combo_count')}`")
     lines.append(f"- combo strategy: `{release_generation.get('combo_strategy')}`")
     lines.append(f"- release policy: `{release_generation.get('release_policy')}`")
+    lines.append(f"- release scope: `{release_generation.get('release_scope')}`")
     lines.append(f"- include non-core releasable: `{release_generation.get('include_non_core')}`")
     lines.append("")
 
@@ -1729,6 +1866,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--manual-release-tests", action="store_true", help="Use the old hard-coded release-test list.")
     ap.add_argument("--no-auto-combinations", action="store_true", help="Disable inferred pairwise/family release tests.")
     ap.add_argument("--core-only", action="store_true", help="Do not include non-core releasable constraints in auto release tests.")
+    ap.add_argument(
+        "--release-scope",
+        default="default_only",
+        choices=["default_only", "fixed_only", "all"],
+        help=(
+            "Which constraints may be released. default_only releases only "
+            "zero-valued fixed default assumptions; fixed_only releases all fixed.* "
+            "constraints; all preserves the previous broad behavior."
+        ),
+    )
     args = ap.parse_args(argv)
 
     payload = load_payload(args.payload, case_index=args.case)
@@ -1740,6 +1887,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         auto_release=not args.manual_release_tests,
         auto_combinations=not args.no_auto_combinations,
         include_non_core=not args.core_only,
+        release_scope=args.release_scope,
     )
 
     default_tag = "custom" if args.payload else f"case{args.case}"
@@ -1778,6 +1926,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"heuristic_combo_tests: {gen.get('heuristic_combo_count')}")
     print(f"combo_strategy: {gen.get('combo_strategy')}")
     print(f"release_policy: {gen.get('release_policy')}")
+    print(f"release_scope: {gen.get('release_scope')}")
     print("")
     print("=== Release tests ===")
     for row in report.get("release_tests", []):

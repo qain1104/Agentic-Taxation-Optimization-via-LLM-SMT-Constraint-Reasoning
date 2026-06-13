@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from typing import Any, Dict, Optional, Sequence
 
 from z3 import Int, Optimize, Real, RealVal, Sum, ToInt, ToReal
@@ -60,6 +61,38 @@ BUILTIN_PAYLOADS = [
 BUILTIN_PAYLOAD = BUILTIN_PAYLOADS[0]["payload"]
 
 
+def _payload_mentions_field(payload: Dict[str, Any], field: str) -> bool:
+    """Return True when a field belongs to the actual user scenario.
+
+    For maximize-under-budget cases, absent catalog rows with default zero
+    should remain form defaults, not decision variables in the maximized
+    quantity. This prevents releasing an unrelated default item from changing
+    the objective semantics.
+    """
+    if field in set(payload.get("free_vars") or []):
+        return True
+    if field in payload:
+        try:
+            return abs(float(payload.get(field) or 0)) > 1e-9
+        except Exception:
+            return True
+
+    constraints = payload.get("constraints") or {}
+    if isinstance(constraints, dict):
+        token = re.escape(field)
+        pattern = re.compile(rf"(?<![A-Za-z0-9_.]){token}(?![A-Za-z0-9_.])")
+        for lhs, rules in constraints.items():
+            if pattern.search(str(lhs)):
+                return True
+            if isinstance(rules, dict):
+                for rhs in rules.values():
+                    values = rhs if isinstance(rhs, (list, tuple)) else [rhs]
+                    for one in values:
+                        if isinstance(one, str) and pattern.search(one):
+                            return True
+    return False
+
+
 class TobaccoAlcoholTaxSMTCase(BaseTrackedTaxCase):
     def build(self):
         if self._built:
@@ -78,7 +111,13 @@ class TobaccoAlcoholTaxSMTCase(BaseTrackedTaxCase):
             q_int = Int(f"{slug}_quantity_int")
             q = ToReal(q_int)
             self._add_param(qname, q, self._num(qname), [("nonnegative", lambda v: v >= 0)], releasable=(qname in self.explicit_keys))
-            qty_terms.append(q)
+            if mode == "maximize_qty":
+                # Maximize only the quantities that define the user scenario.
+                # Other catalog rows are merely absent/default form fields.
+                if _payload_mentions_field(p, qname):
+                    qty_terms.append(q)
+            else:
+                qty_terms.append(q)
             if spec["type"] == "tobacco":
                 expr = q * RealVal(str(spec["base"])) / RealVal(str(spec["div"]))
             else:
@@ -97,7 +136,7 @@ class TobaccoAlcoholTaxSMTCase(BaseTrackedTaxCase):
         self.final_tax_z = total_tax
         self.net_taxable_z = total_tax
         self.add(total_tax == Sum([self.vars[f"{slug}.tax"] for slug in ITEMS]), name="law.total_tax")
-        self.add(total_qty == Sum(qty_terms), name="law.total_qty")
+        self.add(total_qty == (Sum(qty_terms) if qty_terms else RealVal("0")), name="law.total_qty")
         if mode == "maximize_qty":
             budget = int(float(p.get("budget_tax", p.get("target_tax", 0))))
             self.add(total_tax <= budget, name=f"budget.total_tax_le_{budget}", group="user_constraint", releasable=True)
@@ -129,6 +168,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--print-core", action="store_true")
     ap.add_argument("--no-auto-combinations", action="store_true")
     ap.add_argument("--core-only", action="store_true")
+    ap.add_argument(
+        "--release-scope",
+        default="default_only",
+        choices=["default_only", "fixed_only", "all"],
+        help=(
+            "Which constraints may be released. default_only releases only "
+            "zero-valued fixed default assumptions; fixed_only releases all fixed.* "
+            "constraints; all preserves the previous broad behavior."
+        ),
+    )
     ap.add_argument("--no-release-tests", action="store_true")
     ap.add_argument("--probe-only", action="store_true")
     args = ap.parse_args(argv)
@@ -147,6 +196,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         auto_release=not getattr(args, "no_release_tests", False),
         auto_combinations=not getattr(args, "no_auto_combinations", False) and not getattr(args, "no_release_tests", False),
         include_non_core=not getattr(args, "core_only", False),
+        release_scope=args.release_scope,
     )
     write_report(report, json_out=args.json_out, md_out=args.md_out, title="Tobacco Alcohol Tax Tracked SMT Lab")
     base = report.get("base", {})
